@@ -175,9 +175,9 @@ Boksa does not ask for standing access to HTTP or HTTPS sites. It does not send 
 
 ## Privacy policy
 
-`PRIVACY.md` is the original and holds both the English and Korean text. `store/privacy.html` is a page with the same content, ready to host.
+`PRIVACY.md` is the original and holds both the English and Korean text. `store/privacy.html` is the same content as a web page, for hosting elsewhere.
 
-A Web Store listing needs a **public URL**. Put `store/privacy.html` at an address such as `https://baramsoft.com/boksa/privacy/` and enter that address in the privacy policy field of the Developer Dashboard. Change both files together when revising the policy; an automated check confirms that the two copies carry the same effective date.
+A Web Store listing needs a **public URL**. The policy on GitHub is that URL: enter `https://github.com/sungju/boksa-extension/blob/main/PRIVACY.md` in the privacy policy field of the Developer Dashboard. Change both files together when revising the policy; an automated check confirms that the two copies carry the same effective date.
 
 ## Languages
 
@@ -224,6 +224,7 @@ Clipboard transport is mocked in the tests. Running the shortcut in an installed
 - `_locales/en`, `_locales/ko`: every string a user sees
 - `icons/`: extension icons at 16, 32, 48 and 128 (included in the package)
 - `PRIVACY.md`: privacy policy (English and Korean)
+- `SUPPORT.md`: help and how to report a problem (English and Korean)
 - `tools/icon.js`, `tools/make-icons.cjs`: icon source and generator
 - `store/`: material for the Web Store listing (not included in the package)
 - `tests/fixture.html`: page for checking by hand
@@ -236,6 +237,10 @@ Clipboard transport is mocked in the tests. Running the shortcut in an installed
 - [Declaring permissions and file URL access](https://developer.chrome.com/docs/extensions/develop/concepts/declare-permissions)
 - [URL match patterns](https://developer.chrome.com/docs/extensions/develop/concepts/match-patterns)
 - [Loading an extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)
+
+## Support
+
+Questions and problems: see [SUPPORT.md](https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md).
 
 ## Licence
 

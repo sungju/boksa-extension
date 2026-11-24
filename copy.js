@@ -239,6 +239,10 @@
     if (details.open) return false;
     return !CSS.supports('selector(::details-content)') || getComputedStyle(details, '::details-content').contentVisibility === 'hidden';
   }
+  // An <img> given its src here would be fetched by the page if it were not
+  // loaded yet (loading="lazy"), and Boksa asks the network for nothing. The
+  // address waits under a name no page can know, and becomes src in the string.
+  const sourceName = `data-boksa-src-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
   function cloneSelected(node, range, parentComputed) {
     if (!range.intersectsNode(node)) return null;
     if (node.nodeType === Node.TEXT_NODE) {
@@ -275,7 +279,7 @@
       const src = safeURL(node.currentSrc || node.getAttribute('src'), true);
       // A src-less <img> pastes as a broken-image icon; the alt text is more useful.
       if (!src) return alt ? document.createTextNode(alt) : null;
-      copy.setAttribute('src', src);
+      copy.setAttribute(sourceName, src);
       copy.setAttribute('alt', alt);
       // Without these a 2400px screenshot pastes at its intrinsic size. An image
       // that failed or is still loading reports the broken-icon box from .width,
@@ -1905,7 +1909,7 @@
       for (const pre of pres) if (wrapper.contains(pre)) pre.replaceWith(codeTable(pre, hardenCode(pre)));
     }
     stripMarkers();
-    await writeClipboard(wrapper.outerHTML, text);
+    await writeClipboard(wrapper.outerHTML.replaceAll(` ${sourceName}="`, ' src="'), text);
     toast(t('toastDone', 'Copied with styles — paste into your editor'));
     return {ok: true};
   } catch (error) {

@@ -39,7 +39,7 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 
 <section id="en" lang="en">
 <h1>Privacy Policy — Boksa</h1>
-<p class="meta">Effective 29 September 2026 · Sungju Kwon</p>
+<p class="meta">Effective 25 November 2026 · Sungju Kwon</p>
 <p class="switch"><strong>English</strong> · <a href="#ko">한국어</a></p>
 
 <div class="lede">
@@ -48,7 +48,7 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 
 <h2>What Boksa does with page content</h2>
 <p>Boksa runs only when you explicitly invoke it — by pressing its keyboard shortcut or clicking its toolbar button. It is not a background observer and registers no automatically-injected content script.</p>
-<p>When invoked, it reads the text you have selected in the current tab along with the styles the browser has computed for that text, converts them into formatted HTML in memory, and writes the result to your system clipboard. The data exists only for the duration of that single operation and is discarded as soon as it completes.</p>
+<p>When invoked, it reads what you have selected in the current tab (or the whole page, if nothing is selected) along with the styles the browser has computed for it, converts them into formatted HTML in memory, and writes the result to your system clipboard. The data exists only for the duration of that single operation and is discarded as soon as it completes.</p>
 
 <h2>What Boksa does not do</h2>
 <ul>
@@ -64,7 +64,7 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 <h2>Permissions and why each one exists</h2>
 <table>
 <tr><th>Permission</th><th>Why it is needed</th></tr>
-<tr><td><code>activeTab</code></td><td>Temporary access to the one tab you invoked Boksa on, granted by your click or shortcut and revoked afterwards.</td></tr>
+<tr><td><code>activeTab</code></td><td>Temporary access to the one tab you invoked Boksa on, granted by your click or shortcut and used only for that copy. Chrome ends it when the tab goes to another site or is closed.</td></tr>
 <tr><td><code>scripting</code></td><td>Runs the copy routine in that tab to read the selection and its styles.</td></tr>
 <tr><td><code>clipboardWrite</code></td><td>Places the formatted result on your clipboard. Grants no read access.</td></tr>
 <tr><td><code>storage</code></td><td>Saves your copy settings (paste target, backgrounds, text backgrounds, code blocks, syntax colours, fonts). Nothing from any page is ever written to it.</td></tr>
@@ -86,12 +86,12 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 <p>Any revision to this policy will be published at this URL with an updated effective date. Material changes will also be noted in the extension's Web Store listing.</p>
 
 <h2>Contact</h2>
-<p>Questions about this policy: <a href="https://baramsoft.com/support/">baramsoft.com/support</a></p>
+<p>Questions about this policy: <a href="https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md">Boksa support on GitHub</a></p>
 </section>
 
 <section id="ko" lang="ko">
 <h1 style="margin-top:72px">개인정보처리방침 — Boksa</h1>
-<p class="meta">2026년 9월 29일 시행 · Sungju Kwon</p>
+<p class="meta">2026년 11월 25일 시행 · Sungju Kwon</p>
 <p class="switch"><a href="#en">English</a> · <strong>한국어</strong></p>
 
 <div class="lede">
@@ -100,7 +100,7 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 
 <h2>페이지 내용을 어떻게 다루는가</h2>
 <p>Boksa는 사용자가 단축키를 누르거나 툴바 버튼을 클릭해 <strong>명시적으로 실행할 때만</strong> 동작합니다. 배경에서 관찰하지 않으며, 자동으로 삽입되는 content script를 등록하지 않습니다.</p>
-<p>실행되면 현재 탭에서 선택한 텍스트와 브라우저가 그 텍스트에 대해 계산한 스타일을 읽어, 메모리 안에서 서식이 포함된 HTML로 변환한 뒤 시스템 클립보드에 기록합니다. 이 데이터는 해당 동작이 진행되는 동안에만 존재하며 완료 즉시 사라집니다.</p>
+<p>실행되면 현재 탭에서 선택한 내용(선택한 것이 없으면 페이지 전체)과 브라우저가 계산한 스타일을 읽어, 메모리 안에서 서식이 포함된 HTML로 변환한 뒤 시스템 클립보드에 기록합니다. 이 데이터는 해당 동작이 진행되는 동안에만 존재하며 완료 즉시 사라집니다.</p>
 
 <h2>Boksa가 하지 않는 일</h2>
 <ul>
@@ -116,7 +116,7 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 <h2>권한과 그 이유</h2>
 <table>
 <tr><th>권한</th><th>필요한 이유</th></tr>
-<tr><td><code>activeTab</code></td><td>사용자가 실행한 바로 그 탭에 대한 일시적 접근. 클릭이나 단축키로 부여되고 이후 회수됩니다.</td></tr>
+<tr><td><code>activeTab</code></td><td>사용자가 실행한 바로 그 탭에 대한 일시적 접근. 클릭이나 단축키로 부여되며 그 복사에만 사용합니다. 탭이 다른 사이트로 이동하거나 닫히면 Chrome이 접근을 끝냅니다.</td></tr>
 <tr><td><code>scripting</code></td><td>해당 탭에서 복사 로직을 실행해 선택 영역과 스타일을 읽습니다.</td></tr>
 <tr><td><code>clipboardWrite</code></td><td>변환된 결과를 클립보드에 기록합니다. 읽기 권한은 없습니다.</td></tr>
 <tr><td><code>storage</code></td><td>복사 설정(붙여넣을 곳, 배경색, 글자 배경, 코드 블록, 구문 강조, 글꼴)을 저장합니다. 페이지의 내용은 기록하지 않습니다.</td></tr>
@@ -138,11 +138,11 @@ footer { margin-top:56px; padding-top:20px; border-top:1px solid var(--line); co
 <p>이 방침이 개정되면 시행일을 갱신하여 같은 URL에 게시합니다. 중요한 변경 사항은 웹 스토어 등록 정보에도 함께 안내합니다.</p>
 
 <h2>문의</h2>
-<p>이 방침에 관한 문의: <a href="https://baramsoft.com/support/">baramsoft.com/support</a></p>
+<p>이 방침에 관한 문의: <a href="https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md">GitHub의 Boksa 지원 페이지</a></p>
 </section>
 
 <footer>
-<p>Boksa is made by <a href="https://baramsoft.com">Sungju Kwon</a>. · <a href="https://baramsoft.com/support/">Support</a></p>
+<p><a href="https://github.com/sungju/boksa-extension">Boksa</a> is made by Sungju Kwon. · <a href="https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md">Support</a></p>
 </footer>
 
 </main>

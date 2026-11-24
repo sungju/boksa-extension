@@ -1334,6 +1334,25 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
   assert.equal((await run()).ok, true, 'no selection at all also copies the page');
   console.log('PASS empty selection copies the whole page'); passed++;
 
+  // Copying does not fetch an image the page has not
+  // loaded yet, and page text cannot imitate the name its address waits under.
+  for (const target of ['generic', 'salesforce', 'portal']) {
+    const requests = [], watch = request => { if (request.url().startsWith('http')) requests.push(request.url()); };
+    await page.setContent(`<!doctype html><meta charset="utf-8"><p>text data-boksa-src="x"</p><div style="height:20000px"></div>
+      <p><img loading="lazy" src="https://example.com/lazy.png?a=1&amp;b=2" alt="later"></p>`);
+    await page.evaluate(target => { globalThis.boksaOptions = {target}; getSelection().removeAllRanges(); }, target);
+    page.on('request', watch);
+    const lazy = await run();
+    await page.waitForTimeout(150);
+    page.off('request', watch);
+    assert.equal(lazy.ok, true, lazy.error);
+    assert.deepEqual(requests, [], `${target}: the copy caused a request`);
+    assert(lazy.html.includes('src="https://example.com/lazy.png?a=1&amp;b=2"'), `${target}: the image lost its address`);
+    assert(lazy.html.includes('text data-boksa-src="x"') && !/data-boksa-src-/.test(lazy.html), `${target}: the waiting name leaked`);
+  }
+  await page.evaluate(() => { delete globalThis.boksaOptions; });
+  console.log('PASS images the page has not loaded are not fetched'); passed++;
+
   // A page with nothing copyable still reports an error.
   await page.setContent('<!doctype html><meta charset="utf-8"><body></body>');
 

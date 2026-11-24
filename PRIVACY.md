@@ -1,8 +1,8 @@
 # Privacy Policy — Boksa
 
-**Effective date:** 29 September 2026
-**Publisher:** Sungju Kwon · https://baramsoft.com
-**Contact:** https://baramsoft.com/support/
+**Effective date:** 25 November 2026
+**Publisher:** Sungju Kwon · https://github.com/sungju/boksa-extension
+**Contact:** https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md
 
 *[한국어 버전은 아래에 있습니다.](#개인정보처리방침--boksa)*
 
@@ -20,11 +20,11 @@ Boksa runs only when you explicitly invoke it — by pressing its keyboard
 shortcut or clicking its toolbar button. It is not a background observer and
 registers no automatically-injected content script.
 
-When invoked, it reads the text you have selected in the current tab along with
-the styles the browser has computed for that text, converts them into formatted
-HTML in memory, and writes the result to your system clipboard. The data exists
-only for the duration of that single operation and is discarded as soon as it
-completes.
+When invoked, it reads what you have selected in the current tab (or the whole
+page, if nothing is selected) along with the styles the browser has computed for
+it, converts them into formatted HTML in memory, and writes the result to your
+system clipboard. The data exists only for the duration of that single operation
+and is discarded as soon as it completes.
 
 ## What Boksa does not do
 
@@ -45,7 +45,7 @@ completes.
 
 | Permission | Why it is needed |
 |---|---|
-| `activeTab` | Temporary access to the one tab you invoked Boksa on, granted by your click or shortcut and revoked afterwards. |
+| `activeTab` | Temporary access to the one tab you invoked Boksa on, granted by your click or shortcut and used only for that copy. Chrome ends it when the tab goes to another site or is closed. |
 | `scripting` | Runs the copy routine in that tab to read the selection and its styles. |
 | `clipboardWrite` | Places the formatted result on your clipboard. Grants no read access. |
 | `storage` | Saves your copy settings (paste target, backgrounds, text backgrounds, code blocks, syntax colours, fonts). Nothing from any page is ever written to it. |
@@ -87,15 +87,15 @@ Store listing.
 
 ## Contact
 
-Questions about this policy: https://baramsoft.com/support/
+Questions about this policy: https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md
 
 ---
 
 # 개인정보처리방침 — Boksa
 
-**시행일:** 2026년 9월 29일
-**제공자:** Sungju Kwon · https://baramsoft.com
-**문의:** https://baramsoft.com/support/
+**시행일:** 2026년 11월 25일
+**제공자:** Sungju Kwon · https://github.com/sungju/boksa-extension
+**문의:** https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md
 
 ## 요약
 
@@ -108,8 +108,8 @@ Boksa는 사용자가 단축키를 누르거나 툴바 버튼을 클릭해 **명
 동작합니다. 배경에서 관찰하지 않으며, 자동으로 삽입되는 content script를
 등록하지 않습니다.
 
-실행되면 현재 탭에서 선택한 텍스트와 브라우저가 그 텍스트에 대해 계산한 스타일을
-읽어, 메모리 안에서 서식이 포함된 HTML로 변환한 뒤 시스템 클립보드에 기록합니다.
+실행되면 현재 탭에서 선택한 내용(선택한 것이 없으면 페이지 전체)과 브라우저가
+계산한 스타일을 읽어, 메모리 안에서 서식이 포함된 HTML로 변환한 뒤 시스템 클립보드에 기록합니다.
 이 데이터는 해당 동작이 진행되는 동안에만 존재하며 완료 즉시 사라집니다.
 
 ## Boksa가 하지 않는 일
@@ -130,7 +130,7 @@ Boksa는 사용자가 단축키를 누르거나 툴바 버튼을 클릭해 **명
 
 | 권한 | 필요한 이유 |
 |---|---|
-| `activeTab` | 사용자가 실행한 바로 그 탭에 대한 일시적 접근. 클릭이나 단축키로 부여되고 이후 회수됩니다. |
+| `activeTab` | 사용자가 실행한 바로 그 탭에 대한 일시적 접근. 클릭이나 단축키로 부여되며 그 복사에만 사용합니다. 탭이 다른 사이트로 이동하거나 닫히면 Chrome이 접근을 끝냅니다. |
 | `scripting` | 해당 탭에서 복사 로직을 실행해 선택 영역과 스타일을 읽습니다. |
 | `clipboardWrite` | 변환된 결과를 클립보드에 기록합니다. 읽기 권한은 없습니다. |
 | `storage` | 복사 설정(붙여넣을 곳, 배경색, 글자 배경, 코드 블록, 구문 강조, 글꼴)을 저장합니다. 페이지의 내용은 기록하지 않습니다. |
@@ -169,4 +169,4 @@ Sungju Kwon은 Boksa가 Chrome 웹 스토어가 정의한 사용자 데이터 �
 
 ## 문의
 
-이 방침에 관한 문의: https://baramsoft.com/support/
+이 방침에 관한 문의: https://github.com/sungju/boksa-extension/blob/main/SUPPORT.md

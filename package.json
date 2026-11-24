@@ -1,11 +1,15 @@
 {
   "name": "boksa",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "private": true,
   "description": "Chrome extension that copies a selection of rendered Markdown as rich HTML with the page's computed styles inlined.",
-  "homepage": "https://baramsoft.com",
+  "homepage": "https://github.com/sungju/boksa-extension",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sungju/boksa-extension.git"
+  },
   "bugs": {
-    "url": "https://baramsoft.com/support/"
+    "url": "https://github.com/sungju/boksa-extension/issues"
   },
   "license": "MIT",
   "type": "commonjs",

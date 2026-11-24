@@ -40,7 +40,7 @@
     "description": "Toolbar tooltip alongside the OK badge."
   },
   "badgeFailTitle": {
-    "message": "Copy failed: $ERROR$\nCheck that file URL access is allowed, and see the limitations in the README.",
+    "message": "Copy failed: $ERROR$\nFor a local file, turn on \"Allow access to file URLs\" on Boksa's Details page. Chrome pages and the Web Store cannot be copied.",
     "description": "Toolbar tooltip alongside the error badge.",
     "placeholders": {
       "error": {
