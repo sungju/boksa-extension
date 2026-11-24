@@ -11,8 +11,8 @@
   }
   // background.js hands the saved options over in this same isolated world just
   // before injecting; the tests set them on the page. Anything missing or
-  // unrecognised falls back to the default, which is the original behaviour.
-  const defaults = {target: 'generic', backgrounds: 'all', textBackgrounds: 'keep', softLighten: 92, softSaturation: 35,
+  // unrecognised falls back to the default.
+  const defaults = {target: 'portal', backgrounds: 'all', textBackgrounds: 'keep', softLighten: 92, softSaturation: 35,
     codeBlocks: 'standard', highlight: true, fonts: 'page'};
   const choices = {target: ['generic', 'salesforce', 'portal'], backgrounds: ['all', 'code', 'none'], textBackgrounds: ['keep', 'soft', 'none'],
     codeBlocks: ['standard', 'robust'], fonts: ['page', 'editor']};

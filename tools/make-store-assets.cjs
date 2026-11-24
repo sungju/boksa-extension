@@ -209,7 +209,7 @@ const mock = () => {
     await page.evaluate(([strings, options]) => {
       globalThis.chrome = {i18n: {getMessage: key => strings[key]?.message || ''}};
       globalThis.boksaOptions = options;
-    }, [messages(lang), options]);
+    }, [messages(lang), {target: 'generic', ...options}]);
     const result = await page.evaluate(code);
     if (!result?.ok) throw new Error(`copy.js failed while rendering the ${lang} screenshots: ${result?.error}`);
     return page.evaluate(() => window.payload);

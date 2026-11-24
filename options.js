@@ -1,6 +1,6 @@
 'use strict';
 // Must match the defaults in copy.js, which are what an empty storage means.
-const defaults = {target: 'generic', backgrounds: 'all', textBackgrounds: 'keep', softLighten: 92, softSaturation: 35,
+const defaults = {target: 'portal', backgrounds: 'all', textBackgrounds: 'keep', softLighten: 92, softSaturation: 35,
   codeBlocks: 'standard', highlight: true, fonts: 'page'};
 const t = key => chrome.i18n.getMessage(key);
 const form = document.querySelector('main');

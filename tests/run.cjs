@@ -101,6 +101,8 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
   checkPackaging();
   const browser = await chromium.launch({channel: 'chrome', headless: true});
   const page = await browser.newPage();
+  // Checks that name no target are about the any-editor output, not the default.
+  await page.addInitScript(() => { window.boksaOptions = {target: 'generic'}; });
 
   async function run() {
     await page.evaluate(mock);
@@ -277,7 +279,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
   // --------------------------------------------------------------------- options
   async function optioned(name, options, html, verify) {
     await page.setContent(`<!doctype html><html lang="en"><meta charset="utf-8">${html}`);
-    await page.evaluate(o => { window.boksaOptions = o; }, options);
+    await page.evaluate(o => { window.boksaOptions = o; }, {target: 'generic', ...options});
     const result = await copySelection();
     assert.equal(result.ok, true, `${name}: ${result.error}`);
     await verify(result);
@@ -290,7 +292,24 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
     <pre><code><span class="k">if</span> (x) {\n\treturn  1;\n}\n</code></pre></div>`;
   const backgrounds = html => inspect(html, `return [...root.querySelectorAll('*')].filter(e => e.style.backgroundColor).map(e => e.localName)`);
 
-  await optioned('default options change nothing', {}, doc, async r => {
+  // Nothing saved, or no valid target saved, means Salesforce + Customer Portal.
+  {
+    await page.setContent(`<!doctype html><html lang="en"><meta charset="utf-8">${doc}<hr>`);
+    const copied = async options => {
+      await page.evaluate(o => { window.boksaOptions = o; }, options);
+      const result = await copySelection('body');
+      assert.equal(result.ok, true, result.error);
+      return result.html;
+    };
+    const portal = await copied({target: 'portal'});
+    for (const other of ['generic', 'salesforce']) assert.notEqual(await copied({target: other}), portal, `${other} and portal copies should differ here`);
+    for (const options of [undefined, {}, {fonts: 'page'}, {target: 'bogus'}]) {
+      assert.equal(await copied(options), portal, `${JSON.stringify(options)} is not copied for the portal`);
+    }
+    console.log('PASS the default target is Salesforce + Customer Portal'); passed++;
+  }
+
+  await optioned('any editor: the other defaults change nothing', {}, doc, async r => {
     const tags = await backgrounds(r.html);
     for (const tag of ['blockquote', 'pre', 'code', 'mark']) assert(tags.includes(tag), `lost ${tag} background`);
     assert(r.html.includes('white-space: pre'));

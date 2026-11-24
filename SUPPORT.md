@@ -17,9 +17,10 @@ made-up text instead.
   `chrome://extensions` and turn on **Allow access to file URLs**.
 - **Chrome pages, the Web Store and other extensions' pages** cannot be copied.
   Chrome does not let extensions run there.
-- **The paste looks different:** try another **Paste target** or **Code blocks**
-  choice in Boksa's options (right-click the toolbar button → Options). Some
-  editors remove styles whatever is pasted.
+- **The paste looks different:** the default **Paste target** is Salesforce +
+  Customer Portal. For any other editor choose **Any editor** in Boksa's options
+  (right-click the toolbar button → Options), or try another **Code blocks**
+  choice. Some editors remove styles whatever is pasted.
 
 The [README](https://github.com/sungju/boksa-extension#readme) has the full guide.
 
@@ -51,7 +52,8 @@ Privacy policy: [PRIVACY.md](https://github.com/sungju/boksa-extension/blob/main
   **파일 URL에 대한 액세스 허용**을 켜세요.
 - **Chrome 내부 페이지, 웹 스토어, 다른 확장 프로그램의 페이지**는 복사할 수 없습니다.
   Chrome이 확장 프로그램의 실행을 막습니다.
-- **붙여넣은 모양이 다를 때:** Boksa 옵션(툴바 버튼 우클릭 → 옵션)에서 **붙여넣을 곳**이나
+- **붙여넣은 모양이 다를 때:** **붙여넣을 곳**의 기본값은 Salesforce + 고객 포털입니다. 다른
+  편집기에서는 Boksa 옵션(툴바 버튼 우클릭 → 옵션)에서 **모든 편집기**를 고르거나
   **코드 블록**을 바꿔 보세요. 어떤 편집기는 무엇을 붙여넣어도 스타일을 제거합니다.
 
 ## 함께 적어 주세요

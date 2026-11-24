@@ -20,6 +20,8 @@ A Chrome Manifest V3 extension that copies a selection of rendered Markdown as *
 3. Look for the green "Copied with styles" message or `OK` on the extension button.
 4. Paste into your web editor with **⌘V**. Do not use paste without formatting (⌘⇧V).
 
+By default the copy is shaped for Salesforce comments that are also shown in the Customer Portal. For other editors, email and documents, set **Paste target** to **Any editor** in the [options](#copy-options).
+
 **Clicking the extension button** does the same as the shortcut. If the button shows `!`, hover over it to read the error. A failed copy never shows the success mark. Each copy replaces what was on the system clipboard.
 
 The `OK` mark disappears after a few seconds, and each run clears the previous mark first, so that an earlier result is not mistaken for the current one. `…` is shown while a copy is in progress.
@@ -38,7 +40,7 @@ To use a new ZIP as well, unzip it, replace the files in the extension folder yo
 
 ## Copy options
 
-Right-click the Boksa toolbar button and choose **Options**, or open **Extension options** from the Details page at `chrome://extensions`. Changes are saved at once and apply from the next copy. The defaults give the same result as earlier versions.
+Right-click the Boksa toolbar button and choose **Options**, or open **Extension options** from the Details page at `chrome://extensions`. Changes are saved at once and apply from the next copy. The defaults are Salesforce + Customer Portal, Keep all, Keep, Standard, highlighting on and Page fonts. Until 1.6.4 the default paste target was Any editor; a target you chose yourself is kept.
 
 | Option | Choices | Description |
 |---|---|---|
