@@ -69,6 +69,8 @@
   // Structural elements whose absence shifts sibling positions; kept when the
   // source itself is empty, dropped when the range merely grazed their boundary.
   const keepEmpty = new Set(['td', 'th', 'tr', 'thead', 'tbody', 'tfoot', 'li', 'dd', 'dt']);
+  // Containers of blocks even when the page lays them out inline.
+  const sectioning = new Set(['section', 'article', 'aside', 'main', 'nav', 'header', 'footer', 'address', 'details', 'summary']);
   const voids = new Set(['br', 'hr', 'img']);
   // Table parts only get their UA styling inside the right ancestor chain.
   const probeParents = {
@@ -193,6 +195,50 @@
       target.style.setProperty(property, value);
     }
   }
+  // Callouts: GitHub alerts, Obsidian callouts, MkDocs, Docusaurus, VitePress
+  // and MarkdownLens admonitions, and plain quotes starting with [!NOTE]. Both
+  // Salesforce and the portal show no background or side border on an ordinary
+  // block, so a callout is drawn as a quote box titled with its icon and name.
+  // Icons stay in the Basic Multilingual Plane and are plain text everywhere.
+  const calloutStyles = {
+    note: {icon: '\u2139\ufe0f', color: 'rgb(9, 105, 218)'}, tip: {icon: '\u2b50', color: 'rgb(26, 127, 55)'},
+    success: {icon: '\u2705', color: 'rgb(26, 127, 55)'}, important: {icon: '\u2757', color: 'rgb(130, 80, 223)'},
+    question: {icon: '\u2753', color: 'rgb(130, 80, 223)'}, warning: {icon: '\u26a0\ufe0f', color: 'rgb(154, 103, 0)'},
+    caution: {icon: '\u26d4', color: 'rgb(207, 34, 46)'}
+  };
+  const calloutKinds = new Map(Object.entries({
+    note: 'note info abstract summary tldr todo seealso example', tip: 'tip hint', success: 'success check done',
+    important: 'important', question: 'question help faq', warning: 'warning attention',
+    caution: 'caution danger error failure fail bug'
+  }).flatMap(([kind, names]) => names.split(' ').map(name => [name, kind])));
+  const calloutBox = /^(?:[a-z]+-)?(?:alert|callout|admonition|custom-block)$/;
+  const calloutName = /^(?:[a-z]+-)?(?:alert|callout|admonition)-{1,2}([a-z]+)$/;
+  const calloutTitle = /^(?:[a-z]+-)?(?:alert|callout|admonition|custom-block)-(?:title|heading|header)$|^admonitionHeading/;
+  function calloutOf(node, tag) {
+    if (!['div', 'aside', 'section', 'blockquote'].includes(tag)) return null;
+    const names = [...node.classList];
+    if (!names.some(name => calloutBox.test(name))) return null;
+    if (node.dataset.callout) return calloutKinds.get(node.dataset.callout.toLowerCase()) || 'note';
+    const bare = names.some(name => /admonition$|^custom-block$/.test(name));
+    for (const name of names) {
+      const kind = calloutKinds.get(calloutName.exec(name)?.[1] ?? (bare ? name : ''));
+      if (kind) return kind;
+    }
+    return null;
+  }
+  // Notes, on the copy, what the source elements are, for the conversions that
+  // run on the finished copy (its classes are not carried over).
+  function markParts(node, tag, copy) {
+    const kind = calloutOf(node, tag);
+    if (kind) copy.dataset.boksaCallout = kind;
+    if ([...node.classList].some(name => calloutTitle.test(name))) copy.dataset.boksaTitle = '';
+    if (tag === 'summary') copy.dataset.boksaSummary = '';
+  }
+  // Closed, and not shown all the same by the page's own CSS.
+  function isFolded(details) {
+    if (details.open) return false;
+    return !CSS.supports('selector(::details-content)') || getComputedStyle(details, '::details-content').contentVisibility === 'hidden';
+  }
   function cloneSelected(node, range, parentComputed) {
     if (!range.intersectsNode(node)) return null;
     if (node.nodeType === Node.TEXT_NODE) {
@@ -214,9 +260,9 @@
     if (computed.display === 'none' || computed.visibility === 'hidden' || computed.visibility === 'collapse') return null;
     if (Number(computed.opacity) === 0) return null;
     if (tag === 'hr') return ruleTable(node, computed);
-    const copy = document.createElement(allowed.has(tag) ? tag : 'div');
+    const copy = document.createElement(allowed.has(tag) ? tag : salesforce && computed.display.startsWith('inline') && !sectioning.has(tag) ? 'span' : 'div');
     style(tag, copy, computed, parentComputed);
-    if (salesforce) explicitInline(node, tag, copy);
+    if (salesforce) { explicitInline(node, tag, copy); markParts(node, tag, copy); }
     adjust(node, tag, copy, computed);
     solidColors(node, copy);
     for (const name of ['title', 'lang', 'dir']) if (node.hasAttribute(name)) copy.setAttribute(name, node.getAttribute(name));
@@ -262,7 +308,13 @@
     // flavour; descendants that restore a visible size or colour still copy.
     const invisible = parseFloat(computed.fontSize) < 4 || transparent(computed.color);
     let firstItem = null;
+    // A closed <details> shows only its summary, and content-visibility: hidden
+    // shows nothing of its content, although both still compute to display: block.
+    const folded = (tag === 'details' && isFolded(node)) || computed.contentVisibility === 'hidden';
+    const summary = folded && tag === 'details' && computed.contentVisibility !== 'hidden'
+      ? [...node.children].find(child => child.localName === 'summary') : null;
     for (const child of node.childNodes) {
+      if (folded && child !== summary) continue;
       if (invisible && child.nodeType === Node.TEXT_NODE) continue;
       const selected = cloneSelected(child, range, computed);
       if (!selected) continue;
@@ -643,12 +695,15 @@
     item.replaceChildren(out);
   }
   // Quill's own indentation: a class it reads straight from pasted markup.
+  const indentOf = element => integer(/\bql-indent-(\d)\b/.exec(element.className)?.[1], 0);
   function indent(element, levels = 1) {
-    const current = integer(/\bql-indent-(\d)\b/.exec(element.className)?.[1], 0);
+    const current = indentOf(element);
     element.classList.remove(`ql-indent-${current}`);
     const next = Math.min(8, current + levels);
     if (next) element.classList.add(`ql-indent-${next}`);
   }
+  // Anything to see: text, an image, or a table (a rule is one without text).
+  const hasContent = node => !!node.textContent.trim() || ['img', 'table'].includes(node.localName) || !!node.querySelector?.('img, table');
   // Inline content of a block child, keeping its text styling but not its box.
   function inlineOf(block) {
     const box = /^(margin|padding|border)-|^text-indent$/;
@@ -701,6 +756,7 @@
         line.removeAttribute('value');
         if (depth) indent(line, depth);
         const nested = [], extra = [];
+        let afterBlock = false;
         const add = nodes => {
           if (line.textContent.trim() && nodes.length) line.append(' ');
           line.append(...nodes);
@@ -713,7 +769,12 @@
             else extra.push(...spans);
           } else if (child.nodeType === Node.ELEMENT_NODE && blockTags.has(child.localName)) add(inlineOf(child));
           else if (child.nodeType === Node.TEXT_NODE && !child.data.trim()) { if (line.textContent.trim()) line.append(child); }
-          else line.append(child);
+          else {
+            // Text right after a block is a line of its own on screen.
+            if (afterBlock && !/\s$/.test(line.textContent)) line.append(' ');
+            line.append(child);
+          }
+          afterBlock = child.nodeType === Node.ELEMENT_NODE && blockTags.has(child.localName);
         }
         push(source.localName, line);
         for (const span of extra) {
@@ -813,7 +874,7 @@
           if (!line) open(false);
           if (!empty && nodes.length) line.append(' ');
           line.append(...nodes);
-          if (nodes.some(node => node.textContent.trim())) empty = false;
+          if (nodes.some(hasContent)) empty = false;
         };
         open(true);
         let leading = true;
@@ -829,6 +890,8 @@
             // Each paragraph of the item starts its own line under the text.
             if (line && !empty) flush();
             add(inlineOf(child));
+            // Nor does text after it join it.
+            if (!empty) flush();
           } else if (child.nodeType === Node.TEXT_NODE && !child.data.trim()) {
             if (line && !leading && !empty) line.append(child);
           } else {
@@ -883,7 +946,7 @@
     for (const table of [...root.querySelectorAll('table')]) {
       if (table.querySelector('[data-boksa-code]') || table.querySelectorAll('td, th').length < 2) continue;
       const box = table.parentElement;
-      if (box && box !== root && box.localName === 'div' && box.children.length === 1) {
+      if (box && box !== root && box.localName === 'div' && ![...box.childNodes].some(node => node !== table && hasContent(node))) {
         for (const side of sides) for (const part of ['width', 'style', 'color']) {
           const property = `border-${side}-${part}`;
           const value = box.style.getPropertyValue(property);
@@ -923,6 +986,24 @@
           if (totalSlack > 0) shares = shares.map((share, index) => share - excess * slack[index] / totalSlack);
         }
         head.forEach((cell, index) => { cell.style.width = `${Math.round(shares[index] * 10) / 10}%`; });
+      }
+      // The header's shading cannot be kept, so a heavier line sets it apart.
+      const rows = [...table.querySelectorAll('tr')].filter(row => row.closest('table') === table);
+      let header = rows.filter(row => row.parentElement.localName === 'thead');
+      if (!header.length && rows.length > 1 && rows[0].children.length && [...rows[0].children].every(cell => cell.localName === 'th')) header = [rows[0]];
+      // Every cell that reaches the bottom of the header.
+      const under = header.flatMap((row, index) => [...row.children].filter(cell => index + integer(cell.getAttribute('rowspan'), 1) >= header.length));
+      for (const cell of under) {
+        cell.style.setProperty('border-bottom-width', '2px');
+        cell.style.setProperty('border-bottom-style', 'solid');
+        cell.style.setProperty('border-bottom-color', 'rgb(140, 149, 159)');
+      }
+      // Column alignment: the portal removes the style but keeps Quill's class.
+      for (const cell of table.querySelectorAll('td, th')) {
+        const side = /\b(right|center)\b/.exec(cell.style.textAlign)?.[1];
+        if (!side) continue;
+        cell.style.textAlign = side;
+        if (portal) { cell.classList.add(`ql-align-${side}`); cell.setAttribute('align', side); }
       }
       // Without a frame of its own the table gets Salesforce's black default;
       // it takes the colour of its inner lines instead.
@@ -1012,44 +1093,408 @@
     }
   }
   // Two tables back to back (a table, then a rule written as a table) make
-  // Salesforce move the second one to the end of the comment. An empty line
-  // between them keeps both in place.
-  function separateTables(root) {
-    for (const table of [...root.querySelectorAll('table')]) {
-      if (table.parentElement?.closest('table')) continue;
-      let before = table.previousSibling;
-      while (before?.nodeType === Node.TEXT_NODE && !before.data.trim()) before = before.previousSibling;
-      if (before?.nodeType !== Node.ELEMENT_NODE || before.localName !== 'table') continue;
+  // Salesforce move the second one to the end of the comment, and it joins two
+  // quotes or two code blocks into one. An empty line keeps them apart.
+  // What comes before a block once the boxes around it are gone, as in the editor.
+  function blockBefore(block, root) {
+    const empty = node => (node.nodeType === Node.TEXT_NODE && !node.data.trim()) ||
+      (node.localName === 'div' && !node.textContent.trim() && !node.querySelector('img, table, br'));
+    let node = block;
+    while (node && node !== root) {
+      let before = node.previousSibling;
+      while (before && empty(before)) before = before.previousSibling;
+      while (before?.localName === 'div') {
+        let last = before.lastChild;
+        while (last && empty(last)) last = last.previousSibling;
+        before = last;
+      }
+      if (before) return before;
+      node = node.parentElement?.localName === 'div' ? node.parentElement : null;
+    }
+    return null;
+  }
+  function separateNeighbours(root) {
+    for (const block of [...root.querySelectorAll('table, blockquote, pre')]) {
+      if (block.parentElement?.closest('table')) continue;
+      const before = blockBefore(block, root);
+      if (before?.localName !== block.localName) continue;
       const spacer = document.createElement('p');
       spacer.append(document.createElement('br'));
-      table.before(spacer);
+      block.before(spacer);
       // The empty line already provides the gap above.
-      table.style.removeProperty('margin-top');
+      block.style.removeProperty('margin-top');
     }
+  }
+  // The inline content of a block, cut at its line breaks wherever they sit
+  // (<strong>a<br>b</strong> is two bold lines). Empty lines are left out.
+  function splitLines(block) {
+    const breaks = block.querySelectorAll('br');
+    if (!breaks.length) {
+      const whole = document.createDocumentFragment();
+      whole.append(...block.childNodes);
+      return hasContent(whole) ? [whole] : [];
+    }
+    const range = document.createRange();
+    range.setStart(block, 0);
+    const parts = [];
+    const take = () => {
+      let part = range.cloneContents();
+      // cloneContents leaves out the elements that hold both ends of a part.
+      for (let holder = range.commonAncestorContainer; holder !== block; holder = holder.parentNode) {
+        const copy = holder.cloneNode(false);
+        copy.append(part);
+        part = document.createDocumentFragment();
+        part.append(copy);
+      }
+      if (hasContent(part)) parts.push(part);
+    };
+    for (const br of breaks) { range.setEndBefore(br); take(); range.setStartAfter(br); }
+    range.setEnd(block, block.childNodes.length); take();
+    return parts;
+  }
+  // Walks the blocks of a container: paragraphs (and runs of loose text) go to
+  // lines, lists to list, and code, tables and quotes, which hold no lines, to whole.
+  function eachBlock(container, on) {
+    let run = [];
+    const flush = () => {
+      if (run.some(hasContent)) {
+        const loose = document.createElement('p');
+        loose.append(...run);
+        const first = loose.firstChild;
+        if (first.nodeType === Node.TEXT_NODE) first.data = first.data.replace(/^[ \t\n\r\f]+/, '');
+        on.lines(loose);
+      }
+      run = [];
+    };
+    for (const child of [...container.childNodes]) {
+      const tag = child.nodeType === Node.ELEMENT_NODE ? child.localName : '';
+      if (!blockLevel.has(tag)) { run.push(child); continue; }
+      flush();
+      if (['ul', 'ol'].includes(tag)) on.list(child);
+      else if (['pre', 'table', 'blockquote'].includes(tag)) on.whole(child);
+      else if ([...child.children].some(inner => blockLevel.has(inner.localName))) eachBlock(child, on);
+      else if (on.heading && /^h[1-6]$/.test(tag)) on.heading(child);
+      else on.lines(child);
+    }
+    flush();
+  }
+  // Emphasis set by a style on a block (an italic quote) is by now a tag around
+  // the block's own blocks. Inline tags go inside the innermost blocks, the
+  // only place either side keeps them, and the structure is whole again.
+  const structural = new Set(['tr', 'td', 'th', 'thead', 'tbody', 'tfoot', 'caption']);
+  function pushInline(root) {
+    const isBlock = node => node.nodeType === Node.ELEMENT_NODE && (blockLevel.has(node.localName) || structural.has(node.localName));
+    const fill = (block, wrap) => {
+      let run = [];
+      const flush = before => {
+        if (run.some(hasContent)) {
+          const inline = wrap.cloneNode(false);
+          block.insertBefore(inline, before);
+          inline.append(...run);
+        }
+        run = [];
+      };
+      for (const child of [...block.childNodes]) {
+        if (!isBlock(child)) { run.push(child); continue; }
+        flush(child);
+        if (child.localName !== 'pre') fill(child, wrap);
+      }
+      flush(null);
+    };
+    for (const element of [...root.querySelectorAll('*')].reverse()) {
+      if (isBlock(element) || ![...element.children].some(isBlock)) continue;
+      for (const name of ['data-boksa-title', 'data-boksa-summary']) element.removeAttribute(name);
+      const box = document.createElement('div');
+      box.append(...element.childNodes);
+      fill(box, element);
+      element.replaceWith(...box.childNodes);
+    }
+  }
+  // A quote written as "[!NOTE]" that the viewer did not turn into a callout.
+  // Runs before whitespace is collapsed, while the marker's line end is known.
+  function readMarkers(root) {
+    for (const quote of root.querySelectorAll('blockquote')) {
+      if (quote.dataset.boksaCallout) continue;
+      const walker = document.createTreeWalker(quote, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text && !text.data.trim()) text = walker.nextNode();
+      const inner = text?.parentElement.closest('pre, code, li, table, blockquote');
+      if (!text || (inner !== quote && quote.contains(inner))) continue;
+      const match = /^\s*\[!([a-z]+)\][-+]?[ \t]*([^\n]*)(\n[ \t]*|$)/i.exec(text.data);
+      const name = match?.[1].toLowerCase();
+      if (!match || !calloutKinds.has(name)) continue;
+      // The rest of the marker's line is the title only when the line ends in
+      // this text; otherwise (a link or bold text follows) it is body text.
+      const next = text.nextSibling;
+      const titled = match[2].trim() && (match[3].startsWith('\n') || next?.localName === 'br');
+      const title = document.createElement('p');
+      title.dataset.boksaTitle = '';
+      title.textContent = titled ? match[2].trim() : name[0].toUpperCase() + name.slice(1);
+      const rest = text.data.slice(match[0].length);
+      text.data = titled || !match[2].trim() ? rest.replace(/^\s+/, '') : match[2] + match[3] + rest;
+      if (!text.data && next?.localName === 'br') {
+        const after = next.nextSibling;
+        if (after?.nodeType === Node.TEXT_NODE) after.data = after.data.replace(/^\s+/, '');
+        next.remove();
+      }
+      const first = text.parentElement;
+      if (first !== quote && !first.textContent.trim() && !first.querySelector('img')) first.remove();
+      quote.prepend(title);
+      quote.dataset.boksaCallout = calloutKinds.get(name);
+    }
+  }
+  // Every callout becomes a <blockquote> whose title line is bold, coloured
+  // (the portal drops the colour) and led by its icon.
+  function callouts(root) {
+    for (const box of [...root.querySelectorAll('[data-boksa-callout]')]) {
+      const {icon, color} = calloutStyles[box.dataset.boksaCallout];
+      let quote = box;
+      if (box.localName !== 'blockquote') {
+        quote = document.createElement('blockquote');
+        quote.dataset.boksaCallout = box.dataset.boksaCallout;
+        for (const property of ['color', 'font-style', 'font-family', 'font-size']) {
+          const value = box.style.getPropertyValue(property);
+          if (value) quote.style.setProperty(property, value);
+        }
+        quote.append(...box.childNodes);
+        box.replaceWith(quote);
+      }
+      const title = [...quote.querySelectorAll('[data-boksa-title]')].find(part => part.closest('[data-boksa-callout]') === quote);
+      if (!title || !title.textContent.trim() || title.querySelector('ul, ol, pre, table, blockquote')) continue;
+      for (const bold of title.querySelectorAll('strong, b')) bold.replaceWith(...bold.childNodes);
+      for (const part of title.querySelectorAll('[style]')) part.style.removeProperty('color');
+      const decorate = nodes => {
+        const strong = document.createElement('strong');
+        const tint = strong.appendChild(document.createElement('span'));
+        tint.style.color = color;
+        tint.append(`${icon}\u00a0`, ...nodes);
+        const first = tint.childNodes[1];
+        if (first?.nodeType === Node.TEXT_NODE) first.data = first.data.replace(/^[ \t\n\r\f]+/, '');
+        return strong;
+      };
+      // A title that is a list item, a cell or inline text keeps its element.
+      if (!/^(p|div|h[1-6])$/.test(title.localName)) {
+        if (![...title.children].some(inner => blockLevel.has(inner.localName))) title.append(decorate(title.childNodes));
+        continue;
+      }
+      // In a title of several blocks or lines, the first with text is the title.
+      let line = title;
+      for (;;) {
+        loosely(line);
+        const inner = [...line.children].find(child => blockLevel.has(child.localName) && child.textContent.trim());
+        if (!inner) break;
+        line = inner;
+      }
+      const [first, ...others] = splitLines(line);
+      const named = document.createElement('p');
+      named.append(decorate(first.childNodes));
+      line.replaceWith(named, ...others.map(part => { const p = document.createElement('p'); p.append(part); return p; }));
+      if (line !== title) title.replaceWith(...title.childNodes);
+    }
+    for (const part of root.querySelectorAll('[data-boksa-title]')) part.removeAttribute('data-boksa-title');
   }
   // Salesforce's editor keeps a pasted quote as a <blockquote> of paragraphs
   // with class ql-quote-block, and both sides draw it: Salesforce with a grey
-  // bar and box, the portal indented. Only paragraphs survive inside it (a
-  // list falls out of the quote), so a quote holding lists, code, tables or
-  // headings becomes indented paragraphs instead, as does one inside a list
-  // item or table cell, and a quote inside a quote joins its parent.
-  function portalQuote(quote) {
-    if (quote.parentElement?.closest('blockquote')) { quote.replaceWith(...quote.childNodes); return; }
-    if (quote.closest('li, td, th') || quote.querySelector('ol, ul, pre, table, hr, h1, h2, h3, h4, h5, h6')) { unquote(quote); return; }
-    const out = document.createElement('blockquote');
-    const line = () => { const p = document.createElement('p'); p.className = 'ql-quote-block'; out.append(p); return p; };
-    let loose = null;
-    for (const child of [...quote.childNodes]) {
-      if (child.nodeType === Node.ELEMENT_NODE && blockTags.has(child.localName)) {
-        loose = null;
-        if (child.textContent.trim() || child.querySelector('img')) line().append(...inlineOf(child));
-      } else {
-        if (child.nodeType === Node.TEXT_NODE && !child.data.trim() && !loose) continue;
-        (loose ??= line()).append(child);
+  // bar and box, the portal indented. Only paragraphs survive inside it, so
+  // lists are typed out, headings become bold lines, and code blocks and
+  // tables stand between two parts of the quote. Inside a list item or table
+  // cell a quote becomes indented paragraphs, and a quote inside a quote joins
+  // its parent.
+  function quoteBox(quote) {
+    if (quote.parentElement?.closest('blockquote')) {
+      if ([...quote.children].some(child => blockLevel.has(child.localName))) { quote.replaceWith(...loosely(quote)); return; }
+      const p = document.createElement('p');
+      p.append(...quote.childNodes);
+      quote.replaceWith(p);
+      return;
+    }
+    if (quote.closest('li, td, th')) { unquote(quote); return; }
+    const out = document.createDocumentFragment();
+    let box = null;
+    const line = () => {
+      box ??= out.appendChild(document.createElement('blockquote'));
+      const p = box.appendChild(document.createElement('p'));
+      p.className = 'ql-quote-block';
+      for (const property of ['color', 'font-style']) {
+        const value = quote.style.getPropertyValue(property);
+        if (value) p.style.setProperty(property, value);
+      }
+      return p;
+    };
+    // A line break would start a new paragraph anyway; each line is its own.
+    const lines = (block, wrap) => {
+      for (const group of splitLines(block)) {
+        const part = block.cloneNode(false);
+        part.append(group);
+        const p = line();
+        for (const property of ['text-align', 'direction']) {
+          const value = block.style.getPropertyValue(property);
+          if (value) { p.style.setProperty(property, value); part.style.removeProperty(property); }
+        }
+        // Indented lines (a definition) keep their step as spaces.
+        const level = indentOf(block);
+        if (level) p.append('\u00a0'.repeat(level * 4));
+        const target = wrap ? p.appendChild(document.createElement(wrap)) : p;
+        target.append(...inlineOf(part));
+      }
+    };
+    eachBlock(quote, {
+      lines,
+      heading: block => lines(block, 'strong'),
+      list: list => {
+        if (list.querySelector('pre, table')) { box = null; out.append(list); } else for (const item of [...literalList(list).children]) lines(item);
+      },
+      whole: block => { box = null; out.append(block); }
+    });
+    if (out.childNodes.length) quote.replaceWith(out);
+    else quote.remove();
+  }
+  // A definition list has no counterpart on either side (the portal ran its
+  // text together): each term is a bold line with its definitions indented
+  // beneath it.
+  function definitions(list) {
+    const out = document.createDocumentFragment();
+    let breaks = false, previous = '';
+    const body = (part, level, wrap) => eachBlock(part, {
+      lines: block => {
+        for (const group of splitLines(block)) {
+          const p = out.appendChild(document.createElement('p'));
+          p.dataset.boksaTight = '';
+          if (breaks) p.dataset.boksaBreak = '';
+          breaks = false;
+          // A definition list inside this one is already lines of its own.
+          if (level + indentOf(block)) indent(p, level + indentOf(block));
+          const inline = block.cloneNode(false);
+          inline.append(group);
+          (wrap ? p.appendChild(document.createElement(wrap)) : p).append(...inlineOf(inline));
+        }
+      },
+      list: block => out.append(block),
+      whole: block => { if (block.localName === 'pre') indent(block, level); out.append(block); }
+    });
+    const visit = parts => {
+      let stray = [];
+      // Not valid inside a definition list, but shown on screen all the same.
+      const flush = () => {
+        const loose = document.createElement('dd');
+        loose.append(...stray);
+        stray = [];
+        if (hasContent(loose)) body(loose, 1);
+      };
+      for (const part of parts) {
+        const tag = part.nodeType === Node.ELEMENT_NODE ? part.localName : '';
+        const group = tag === 'div' && part.querySelector('dt, dd');
+        if (!group && !['dt', 'dd'].includes(tag)) { stray.push(part); continue; }
+        flush();
+        if (group) { visit([...part.childNodes]); continue; }
+        breaks = tag === 'dt' && previous === 'dd';
+        body(part, tag === 'dt' ? 0 : 1, tag === 'dt' ? 'strong' : undefined);
+        previous = tag;
+      }
+      flush();
+    };
+    visit([...list.childNodes]);
+    list.replaceWith(out);
+  }
+  // Salesforce's editor drops <sub> and <sup>, so "x²" arrived as "x2". Where
+  // Unicode has every character raised or lowered, those are used instead.
+  const scripts = {
+    sup: ['0123456789+-\u2212=()abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUVW',
+      '\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079\u207a\u207b\u207b\u207c\u207d\u207e\u1d43\u1d47\u1d9c\u1d48\u1d49\u1da0\u1d4d\u02b0\u2071\u02b2\u1d4f\u02e1\u1d50\u207f\u1d52\u1d56\u02b3\u02e2\u1d57\u1d58\u1d5b\u02b7\u02e3\u02b8\u1dbb\u1d2c\u1d2e\u1d30\u1d31\u1d33\u1d34\u1d35\u1d36\u1d37\u1d38\u1d39\u1d3a\u1d3c\u1d3e\u1d3f\u1d40\u1d41\u2c7d\u1d42'],
+    sub: ['0123456789+-\u2212=()aehijklmnoprstuvx',
+      '\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089\u208a\u208b\u208b\u208c\u208d\u208e\u2090\u2091\u2095\u1d62\u2c7c\u2096\u2097\u2098\u2099\u2092\u209a\u1d63\u209b\u209c\u1d64\u1d65\u2093']
+  };
+  function unicodeScripts(root) {
+    for (const element of [...root.querySelectorAll('sup, sub')].reverse()) {
+      if (element.closest('pre, code, kbd, samp') || element.querySelector('sup, sub, code, kbd, samp, img, br')) continue;
+      const [from, to] = scripts[element.localName];
+      if ([...element.textContent].some(ch => !from.includes(ch) && ch.trim())) continue;
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const text = walker.currentNode;
+        text.data = [...text.data].map(ch => from.includes(ch) && ch.trim() ? to[from.indexOf(ch)] : ch).join('');
+      }
+      element.replaceWith(...element.childNodes);
+    }
+  }
+  // The children of a box about to be unwrapped, its loose text in paragraphs
+  // of its own so that it does not join the text around the box.
+  function loosely(box) {
+    wrapLooseText(box);
+    return [...box.childNodes];
+  }
+  // Elements the editor drops, written as the nearest one both sides draw.
+  function richInline(root) {
+    const rename = (element, tag) => {
+      const renamed = document.createElement(tag);
+      for (const name of element.getAttributeNames()) renamed.setAttribute(name, element.getAttribute(name));
+      renamed.append(...element.childNodes);
+      element.replaceWith(renamed);
+    };
+    unicodeScripts(root);
+    // Underlined by a style alone: Quill reads only the tag.
+    for (const element of [...root.querySelectorAll('[style*="underline"]')]) {
+      if (!/\bunderline\b/.test(element.style.textDecorationLine) || !element.firstChild) continue;
+      if (['a', 'u', 'ins', 'abbr'].includes(element.localName) || element.closest('a, pre')) continue;
+      if ([...element.children].some(child => blockLevel.has(child.localName))) continue;
+      let u = null;
+      for (const child of [...element.childNodes]) {
+        if (child.localName === 'br') { u = null; continue; }
+        if (!u) { u = document.createElement('u'); child.before(u); }
+        u.append(child);
       }
     }
-    if (out.children.length) quote.replaceWith(out);
-    else quote.remove();
+    // Inside a code block everything is plain text; in code, <em> would be lost.
+    for (const [tag, name] of [['ins', 'u'], ['mark', 'strong'], ['var', 'em'], ['kbd', 'code'], ['samp', 'code']]) {
+      for (const element of [...root.querySelectorAll(tag)]) {
+        if (element.closest('pre')) continue;
+        // <kbd><kbd>Ctrl</kbd>+<kbd>C</kbd></kbd> and <code><kbd>: one level.
+        if (name === 'code' && element.parentElement.closest('code')) { element.replaceWith(...element.childNodes); continue; }
+        // Styled emphasis may already be a tag inside it (<var><em>).
+        const only = element.childNodes.length === 1 && element.firstChild.localName === name;
+        if (only) element.replaceWith(...element.childNodes);
+        else rename(element, name);
+      }
+    }
+    for (const summary of [...root.querySelectorAll('[data-boksa-summary]')]) {
+      const inline = ![...summary.children].some(child => blockLevel.has(child.localName));
+      if (!inline) { summary.replaceWith(...loosely(summary)); continue; }
+      if (summary.closest('li, td, th, p')) {
+        const strong = document.createElement('strong');
+        strong.append(...summary.childNodes);
+        summary.append(strong);
+        continue;
+      }
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('strong')).append(...summary.childNodes);
+      // Out of its <details> box, the content is spaced like any other block.
+      const box = summary.parentElement;
+      summary.replaceWith(p);
+      if (box !== root && box.localName === 'div' && !box.hasAttribute('data-boksa-callout')) box.replaceWith(...loosely(box));
+    }
+    for (const caption of [...root.querySelectorAll('figcaption')]) {
+      const inline = ![...caption.children].some(child => blockLevel.has(child.localName));
+      if (!inline) { caption.replaceWith(...caption.childNodes); continue; }
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('em')).append(...caption.childNodes);
+      caption.replaceWith(p);
+    }
+    for (const figure of [...root.querySelectorAll('figure')]) {
+      if (figure.closest('li, td, th, p')) rename(figure, 'div');
+      else figure.replaceWith(...loosely(figure));
+    }
+    // Task boxes: the two ballot boxes look alike at 13px, these do not.
+    for (const item of root.querySelectorAll('li')) {
+      const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text && !text.data.trim()) text = walker.nextNode();
+      const box = text && /^\s*([\u2611\u2610])\s*/.exec(text.data);
+      if (!box || text.parentElement.closest('li') !== item || text.parentElement.closest('pre, code')) continue;
+      const rest = text.data.slice(box[0].length);
+      text.data = `${box[1] === '\u2611' ? '\u2705' : '\u2b1c'}\u00a0${rest}`;
+      const after = rest ? null : walker.nextNode();
+      if (after && after.parentElement.closest('li') === item && !after.parentElement.closest('pre')) after.data = after.data.replace(/^\s+/, '');
+    }
   }
   // The portal draws paragraphs with no space between them, so blocks run
   // together. Quill writes a blank line as an empty paragraph, so one goes
@@ -1058,8 +1503,9 @@
   const spacedBlocks = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol', 'ul', 'table', 'blockquote']);
   function spaceBlocks(root) {
     const blank = () => { const p = document.createElement('p'); p.append(document.createElement('br')); return p; };
+    const isBlank = block => block.localName === 'p' && !block.textContent.trim() && block.querySelector('br');
     for (const block of [...root.querySelectorAll([...spacedBlocks].join(', '))]) {
-      if (block.parentElement?.closest('li, ol, ul, blockquote, table')) continue;
+      if (block.parentElement?.closest('li, ol, ul, blockquote, table') || isBlank(block)) continue;
       const before = block.previousElementSibling;
       if (!before || !spacedBlocks.has(before.localName)) continue;
       if (before.hasAttribute('data-boksa-tight') && block.hasAttribute('data-boksa-tight') && !block.hasAttribute('data-boksa-break')) continue;
@@ -1069,7 +1515,7 @@
       // paragraphs none).
       if (/^h[1-6]$/.test(block.localName) || /^h[1-6]$/.test(before.localName)) continue;
       if (['ol', 'ul', 'table', 'blockquote'].includes(before.localName)) continue;
-      if (!before.textContent.trim() && before.querySelector('br')) continue;
+      if (isBlank(before)) continue;
       block.before(blank());
     }
   }
@@ -1256,6 +1702,18 @@
     }
     return container;
   }
+  // Once a page has been painted, Chrome includes the content of a closed
+  // <details> in Selection.toString() although it is not on screen. It is left
+  // out of layout while the text is read; the sheet is gone before any paint.
+  function visibleText(selection) {
+    if (![...document.querySelectorAll('details')].some(isFolded)) return selection.toString();
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`details:not([open]) > :not(summary:first-of-type) { display: none !important }
+      details:not([open])::details-content { display: none !important }`);
+    const before = [...document.adoptedStyleSheets];
+    document.adoptedStyleSheets = [...before, sheet];
+    try { return selection.toString(); } finally { document.adoptedStyleSheets = before; }
+  }
   async function writeClipboard(html, text) {
     // ClipboardEvent works on file/http pages where Async Clipboard may be unavailable.
     let handled = false;
@@ -1291,7 +1749,7 @@
       restoreSelection = () => { selection.removeAllRanges(); if (caret) selection.addRange(caret); };
       selection.selectAllChildren(document.body);
     }
-    const text = selection.toString();
+    const text = visibleText(selection);
     const wrapper = document.createElement('div');
     for (let index = 0; index < selection.rangeCount; index++) {
       const range = selection.getRangeAt(index).cloneRange();
@@ -1300,15 +1758,21 @@
       if (fragment) surface(root, wrapper).append(fragment);
     }
     if (!wrapper.childNodes.length) throw new Error(t('errNothingCopyable', 'The selection contains nothing that can be copied.'));
+    if (salesforce) readMarkers(wrapper);
     collapseWhitespace(wrapper);
     trimAfterBreaks(wrapper);
     semanticEmphasis(wrapper);
     const stripMarkers = () => {
-      for (const marked of wrapper.querySelectorAll('[data-boksa-code], [data-boksa-width], [data-boksa-min], [data-boksa-tight], [data-boksa-break]')) {
-        for (const name of ['data-boksa-code', 'data-boksa-width', 'data-boksa-min', 'data-boksa-tight', 'data-boksa-break']) marked.removeAttribute(name);
+      const names = ['code', 'width', 'min', 'tight', 'break', 'callout', 'title', 'summary'].map(name => `data-boksa-${name}`);
+      for (const marked of wrapper.querySelectorAll(names.map(name => `[${name}]`).join(', '))) {
+        for (const name of names) marked.removeAttribute(name);
       }
     };
     if (salesforce) {
+      pushInline(wrapper);
+      callouts(wrapper);
+      richInline(wrapper);
+      for (const list of [...wrapper.querySelectorAll('dl')].reverse()) definitions(list);
       // Viewers wrap code blocks in containers (a language label and a copy
       // button around the <pre>). Unwrapped, the <pre> is a direct child of
       // its list item or of the page and is laid out like any other block.
@@ -1322,16 +1786,23 @@
           box.replaceWith(...box.childNodes);
         }
       }
-      for (const quote of [...wrapper.querySelectorAll('blockquote')].reverse()) (portal ? portalQuote : unquote)(quote);
+      for (const quote of [...wrapper.querySelectorAll('blockquote')].reverse()) quoteBox(quote);
       // A code block left unindented in Markdown ends up after the list
       // rather than inside its item. Moved into the last item, it is laid out
       // beneath that item's text like an indented one.
       for (const pre of [...wrapper.querySelectorAll('pre')]) {
         if (pre.closest('li')) continue;
-        const list = pre.previousElementSibling;
+        // Text between the two keeps the code where it is.
+        let list = pre.previousSibling;
+        while (list?.nodeType === Node.TEXT_NODE && !list.data.trim()) list = list.previousSibling;
         if (!list || !['ol', 'ul'].includes(list.localName)) continue;
         const item = [...list.children].filter(child => child.localName === 'li').pop();
         if (item) item.append(pre);
+      }
+      // Boxes of blocks inside an item: an item holds only lines, so the blocks
+      // become the item's own.
+      for (const box of [...wrapper.querySelectorAll('li div')].reverse()) {
+        if (!box.closest('td, th') && [...box.children].some(child => blockLevel.has(child.localName))) box.replaceWith(...loosely(box));
       }
       for (const list of [...wrapper.querySelectorAll('ol, ul')].filter(list => !list.parentElement?.closest('li'))) {
         // Any code block, even one line: Salesforce strips the monospace
@@ -1346,19 +1817,23 @@
         const literal = resumes || !!list.querySelector('pre, li ul, li ol');
         list.replaceWith(literal ? literalList(list) : flatList(list));
       }
-      for (const pre of [...wrapper.querySelectorAll('pre:not(.ql-syntax)')]) pre.replaceWith(quillCode(pre));
+      for (const pre of [...wrapper.querySelectorAll('pre:not(.ql-syntax)')]) {
+        const code = quillCode(pre);
+        indent(code, indentOf(pre));
+        pre.replaceWith(code);
+      }
       for (const paragraph of portal ? [] : [...wrapper.querySelectorAll('p')]) {
-        if (paragraph.closest('li, td, th') || ![...paragraph.children].some(child => child.localName === 'br')) continue;
+        if (paragraph.closest('li, td, th, blockquote') || ![...paragraph.children].some(child => child.localName === 'br')) continue;
         const table = lineTable(paragraph);
         // Only one line left once the trailing break is gone: a plain paragraph.
         if (table.querySelector('br')) paragraph.replaceWith(table);
         else paragraph.append(...table.querySelector('td').childNodes);
       }
-      if (!portal) separateTables(wrapper);
       dataTables(wrapper);
       wrapLooseText(wrapper);
+      if (!portal) separateNeighbours(wrapper);
       salesforceFonts(wrapper);
-      if (portal) { untable(wrapper); separateTables(wrapper); portalTags(wrapper); portalHeadings(wrapper); spaceBlocks(wrapper); }
+      if (portal) { untable(wrapper); separateNeighbours(wrapper); portalTags(wrapper); portalHeadings(wrapper); spaceBlocks(wrapper); }
       salesforceColors(wrapper);
     } else if (options.codeBlocks === 'robust') {
       const pres = [...wrapper.querySelectorAll('pre')];

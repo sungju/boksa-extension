@@ -493,7 +493,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
     async r => { assert(r.html.includes('rgb(238, 238, 238)'), 'light text dropped although its dark canvas is kept'); });
 
   // Salesforce Lightning (Quill 1.x). Expectations follow a probe paste into
-  // the real field: tags like <code>/<mark>/<pre>/<blockquote> are dropped,
+  // the real field: tags like <mark>/<pre>/<hr> are dropped, quotes are kept,
   // styles on them kept, nested <ul> read one level short, <br> in an item
   // starts a new item, tables kept verbatim.
   const sfDoc = `<style>code{background:#eff1f3;font-family:Menlo,monospace}pre{background:#f6f8fa;font-family:Menlo,monospace}
@@ -510,7 +510,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
       const items = list => [...list.children].map(li => [li.className, li.textContent.replace(/^[ \\n]+|[ \\n]+$/g, '')]);
 
       return {
-        pre: root.querySelectorAll('pre:not(.ql-syntax), blockquote, hr').length,
+        pre: root.querySelectorAll('pre:not(.ql-syntax), blockquote > :not(p.ql-quote-block), hr').length,
         code: [...root.querySelectorAll('pre.ql-syntax')].map(p => p.textContent),
         nestedLists: root.querySelectorAll('li ul, li ol').length,
         lists: root.querySelectorAll('ol, ul').length,
@@ -518,11 +518,11 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         steps: [...root.querySelectorAll('p')].map(p => p.textContent.replace(/\\u00a0/g, '_')).filter(t => /^\\d\\./.test(t)),
         codeFont: root.querySelector('p code').style.fontFamily,
         backgrounds: [...root.querySelectorAll('*')].filter(e => e.style.backgroundColor).map(e => e.localName),
-        quote: [root.querySelector('p.ql-indent-1')?.textContent.trim(), root.querySelector('p.ql-indent-1')?.style.color],
+        quote: [root.querySelector('blockquote > p.ql-quote-block')?.textContent.trim(), root.querySelector('blockquote > p.ql-quote-block')?.style.color],
         blocksInItems: root.querySelectorAll('li p, li div, li table, li br').length,
         tables: root.querySelectorAll('table').length
       }`);
-    assert.equal(shape.pre, 0, 'only Quill code blocks; no blockquote/hr');
+    assert.equal(shape.pre, 0, 'only Quill code blocks and quote lines; no hr');
     assert.deepEqual(shape.code, ['# show', 'outside'], 'code blocks use Salesforce\'s Code Block format');
     assert.equal(shape.nestedLists, 0, 'lists must be flat');
     // Nested levels are typed out, indented four spaces per level.
@@ -712,12 +712,282 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
       assert.equal(shape.style, null, 'Salesforce draws its own quote bar');
     });
 
-  await optioned('portal: a quote holding a list becomes indented paragraphs', {target: 'portal'},
-    `<div id="target"><blockquote><p>Steps:</p><ul><li>one</li></ul></blockquote></div>`,
-    async r => {
-      const shape = await inspect(r.html, "return [root.querySelectorAll('blockquote').length, root.querySelector('p.ql-indent-1')?.textContent]");
-      assert.deepEqual(shape, [0, 'Steps:']);
+  // --------------------------------------------- elements both sides can draw
+  for (const target of ['salesforce', 'portal']) {
+    const quotes = html => inspect(html, `return [...root.querySelectorAll('blockquote')].map(q =>
+      [...q.children].map(p => p.localName + '.' + p.className + ':' + p.textContent.replace(/\\u00a0/g, '_').trim()))`);
+    const order = html => inspect(html, `const top = root.querySelector('blockquote, table, p, pre').parentElement;
+      return [...top.children].map(e => e.localName + ':' + (e.textContent.replace(/\\u00a0/g, '_').trim() || 'BLANK'))`);
+
+    await optioned(`${target}: a quote types out its list and keeps code outside the box`, {target},
+      `<div id="target"><blockquote><h3>Plan</h3><p>Steps:<br>\nin order</p><ul><li>one<ul><li>deep</li></ul></li></ul><pre><code>run</code></pre><p>Done.</p></blockquote></div>`,
+      async r => {
+        assert.deepEqual(await quotes(r.html), [
+          ['p.ql-quote-block:Plan', 'p.ql-quote-block:Steps:', 'p.ql-quote-block:in order', 'p.ql-quote-block:•_one', 'p.ql-quote-block:____◦_deep'],
+          ['p.ql-quote-block:Done.']]);
+        assert.equal(await inspect(r.html, "return root.querySelector('pre.ql-syntax').closest('blockquote')"), null);
+        assert.equal(await inspect(r.html, "return root.querySelector('blockquote strong').textContent"), 'Plan');
+      });
+
+    // The markup of GitHub, Obsidian, MkDocs, Docusaurus, VitePress, MarkdownLens.
+    const callouts = {
+      github: '<div class="markdown-alert markdown-alert-warning"><p class="markdown-alert-title" style="font-weight:600"><svg><path d="M0 0"/></svg>Warning</p><p>Body.</p></div>',
+      obsidian: '<div class="callout" data-callout="danger"><div class="callout-title"><div class="callout-icon"><svg></svg></div><div class="callout-title-inner">Take care</div></div><div class="callout-content"><p>Body.</p></div></div>',
+      mkdocs: '<div class="admonition tip"><p class="admonition-title">Tip</p><p>Body.</p></div>',
+      docusaurus: '<div class="theme-admonition theme-admonition-info alert alert--info"><div class="admonitionHeading_x1"><span><svg></svg></span>info</div><div class="admonitionContent_x1"><p>Body.</p></div></div>',
+      vitepress: '<div class="danger custom-block"><p class="custom-block-title">DANGER</p><p>Body.</p></div>',
+      markdownlens: '<div class="mdl-admonition mdl-admonition-important"><p class="mdl-admonition-title">Important</p><p>Body.</p></div>',
+      marker: '<blockquote><p>[!NOTE]\nBody.</p></blockquote>',
+      markerAlone: '<blockquote><p>[!CAUTION]</p><p>Body.</p></blockquote>',
+      markerBreak: '<blockquote><p>[!TIP]<br>\nBody.</p></blockquote>',
+      markerTitle: '<blockquote><p>[!question]- Why now?\nBody.</p></blockquote>',
+      markerInline: '<blockquote><p>[!NOTE] <b>Body</b>.</p></blockquote>'
+    };
+    const titles = {github: '⚠️_Warning', obsidian: '⛔_Take care', mkdocs: '⭐_Tip', docusaurus: 'ℹ️_info', vitepress: '⛔_DANGER',
+      markdownlens: '❗_Important', marker: 'ℹ️_Note', markerAlone: '⛔_Caution', markerBreak: '⭐_Tip', markerTitle: '❓_Why now?', markerInline: 'ℹ️_Note'};
+    for (const [source, markup] of Object.entries(callouts)) {
+      await optioned(`${target}: ${source} callout becomes a titled quote box`, {target}, `<div id="target"><p>Before.</p>${markup}<p>After.</p></div>`, async r => {
+        assert.deepEqual(await quotes(r.html), [[`p.ql-quote-block:${titles[source]}`, 'p.ql-quote-block:Body.']]);
+        assert.equal(await inspect(r.html, "return root.querySelector('blockquote strong').textContent.replace(/\\u00a0/g, '_')"), titles[source]);
+        assert.match(await inspect(r.html, "return root.querySelector('blockquote strong span').style.color"), /^rgb\(/);
+        // The line above and below stay outside, and nothing starts with a space.
+        assert(!/>\s+Body/.test(r.html.match(/<blockquote>.*<\/blockquote>/s)[0]), 'leading space in the body');
+        assert(!/data-boksa|class="(?!ql-)/.test(r.html));
+      });
+    }
+    await optioned(`${target}: ordinary boxes, unknown markers and code are not callouts`, {target},
+      `<div id="target"><div class="callout"><p>plain box</p></div><div class="alerts"><p>list</p></div>
+       <blockquote><p>[!unknown] text</p></blockquote><p>[!NOTE] not quoted</p></div>`,
+      async r => {
+        assert.deepEqual(await quotes(r.html), [['p.ql-quote-block:[!unknown] text']]);
+        assert(!/[ℹ⚠⭐]/.test(r.html));
+      });
+    await optioned(`${target}: part of a callout copied without its title gets no title`, {target},
+      `<div class="admonition note"><p class="admonition-title">Note</p><div id="target"><p>One.</p><p>Two.</p></div></div>`,
+      r => { assert(!/Note|ℹ/.test(r.html)); });
+    await optioned(`${target}: a callout in a list item stays in its item`, {target},
+      `<div id="target"><ol><li><p>Step</p><div class="admonition note"><p class="admonition-title">Note</p><p>Body.</p></div></li></ol></div>`,
+      async r => {
+        assert.equal(await inspect(r.html, "return root.querySelectorAll('li blockquote, li p, li div').length"), 0);
+        assert.equal((await inspect(r.html, 'return root.textContent')).replace(/\s+/g, ' ').trim(), 'Step ℹ️ Note Body.');
+      });
+
+    await optioned(`${target}: quotes and code blocks in a row stay separate`, {target},
+      `<div id="target"><blockquote><p>a</p></blockquote><blockquote><p>b</p></blockquote><p>x</p><pre><code>c</code></pre><pre><code>d</code></pre></div>`,
+      async r => {
+        const blocks = await order(r.html);
+        const at = blocks.indexOf('blockquote:a');
+        assert.deepEqual(blocks.slice(at, at + 3), ['blockquote:a', 'p:BLANK', 'blockquote:b']);
+        assert.deepEqual(blocks.slice(-3), ['pre:c', 'p:BLANK', 'pre:d'], 'exactly one empty line');
+      });
+
+    await optioned(`${target}: task lists use distinct boxes in a real list`, {target},
+      `<div id="target"><ul><li><input type="checkbox" checked> Done <b>it</b></li><li><p><input type="checkbox"> <code>later</code></p></li><li>plain</li></ul></div>`,
+      async r => {
+        assert.deepEqual(await inspect(r.html, "return [...root.querySelectorAll('ul > li')].map(li => li.textContent.replace(/\\u00a0/g, '_').trim())"),
+          ['✅_Done it', '⬜_later', 'plain']);
+      });
+
+    await optioned(`${target}: definition lists become bold terms over indented lines`, {target},
+      `<div id="target"><dl><dt>Kernel</dt><dd>5.14.0</dd><div><dt>Arch</dt><dd><p>x86_64</p><pre><code>uname -m</code></pre><dl><dt>Sub</dt><dd>inner</dd></dl></dd></div></dl></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return [...root.querySelectorAll('p, pre')].filter(e => e.textContent.trim())
+          .map(e => (/ql-indent-(\\d)/.exec(e.className)?.[1] ?? '0') + (e.querySelector('strong') ? 'b' : '') + ':' + e.textContent)`);
+        assert.deepEqual(shape, ['0b:Kernel', '1:5.14.0', '0b:Arch', '1:x86_64', '1:uname -m', '1b:Sub', '2:inner']);
+      });
+
+    await optioned(`${target}: raised and lowered text, underline and highlight survive`, {target},
+      `<div id="target"><p>x<sup>2</sup> 10<sup>-6</sup> H<sub>2</sub>O y<sup>Q</sup> <code>a<sup>2</sup></code> <mark>hot</mark> <ins>new</ins>
+        <span style="text-decoration:underline">line</span> <a href="https://example.com/">link</a> <kbd><kbd>Ctrl</kbd>+<kbd>C</kbd></kbd> <var>n</var></p>
+        <details open><summary>More</summary><p>Shown.</p></details><figure><p>body</p><figcaption>Figure 1</figcaption></figure></div>`,
+      async r => {
+        const shape = await inspect(r.html, `const t = s => [...root.querySelectorAll(s)].map(e => e.textContent);
+          return {text: root.querySelector('p').textContent, strong: t('strong'), u: t('u'), em: t('em'), code: t('code'),
+            dropped: root.querySelectorAll('mark, ins, var, kbd, summary, details, figure, figcaption').length, linkInU: root.querySelectorAll('u a, a u').length}`);
+        assert.match(shape.text, /^x² 10⁻⁶ H₂O yQ a2 /);
+        assert.deepEqual(shape.strong, ['hot', 'More']);
+        assert.deepEqual(shape.u, ['new', 'line']);
+        assert.deepEqual(shape.em, ['n', 'Figure 1']);
+        assert.deepEqual(shape.code, ['a2', 'Ctrl+C']);
+        assert.equal(shape.dropped, 0);
+        assert.equal(shape.linkInU, 0);
+        const blocks = await order(r.html);
+        assert.deepEqual(blocks.filter(b => !b.endsWith('BLANK')).slice(1), ['p:More', 'p:Shown.', 'p:body', 'p:Figure 1'], 'summary and figure boxes are unwrapped');
+        // In the portal every one of them is spaced.
+        if (target === 'portal') assert.equal(blocks.filter(b => b.endsWith('BLANK')).length, 4);
+      });
+
+    await optioned(`${target}: tables get a heavier header line and keep their alignment`, {target},
+      `<style>td,th{border:1px solid #d0d7de}th{background:#eee}</style><div id="target"><table><thead><tr><th align="left">Name</th><th align="right">Count</th></tr></thead>
+       <tbody><tr><td>a</td><td align="right">10</td></tr></tbody></table></div>`,
+      async r => {
+        const shape = await inspect(r.html, `const cells = [...root.querySelectorAll('th, td')];
+          return {under: cells.map(c => c.style.borderBottom), side: cells.map(c => c.style.textAlign), cls: cells.map(c => c.className)}`);
+        assert.deepEqual(shape.under, ['2px solid rgb(140, 149, 159)', '2px solid rgb(140, 149, 159)', '1px solid rgb(208, 215, 222)', '1px solid rgb(208, 215, 222)']);
+        assert.equal(shape.side[1], 'right'); assert.equal(shape.side[3], 'right');
+        assert.deepEqual([shape.cls[1], shape.cls[3]], target === 'portal' ? ['ql-align-right', 'ql-align-right'] : ['', '']);
+      });
+
+    // Everything at once: nothing either side drops, prints as text or moves.
+    await optioned(`${target}: no tag outside what both sides draw`, {target},
+      `<style>td,th{border:1px solid #d0d7de}</style><div id="target"><h2>T</h2>${Object.values(callouts).join('')}
+        <blockquote><p>q</p><table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table></blockquote>
+        <ul><li><input type="checkbox" checked> t</li></ul><dl><dt>a</dt><dd>b</dd></dl><details open><summary>s</summary>d</details>
+        <p>x<sup>Q</sup><sub>2</sub> <mark>m</mark> <ins>i</ins> <del>d</del> <kbd>k</kbd> <var>v</var> <abbr title="t">ab</abbr> <small>s</small> <q>q</q></p>
+        <figure><p>f</p><figcaption>c</figcaption></figure><pre><code>x</code></pre><hr><p>End<br>line</p></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return {tags: [...new Set([...root.querySelectorAll('*')].map(e => e.localName))],
+          inItems: root.querySelectorAll('li p, li div, li pre, li table, li blockquote, li br').length,
+          inQuotes: root.querySelectorAll('blockquote > :not(p.ql-quote-block), blockquote p :is(p, div, table, pre, ul, ol, br)').length,
+          inParagraphs: root.querySelectorAll(':is(p, span, h1, h2, h3) :is(p, div, table, pre, blockquote, ul, ol)').length,
+          backgrounds: [...root.querySelectorAll('*')].filter(e => e.style.backgroundColor).length,
+          longhand: [...root.querySelectorAll('*')].filter(e => /border-(top|right|bottom|left)-color|border-color/.test(e.getAttribute('style') || '')).length}`);
+        // Salesforce alone may also hold tags its editor drops without harm.
+        const extra = target === 'portal' ? [] : ['del', 'abbr', 'small', 'q'];
+        assert.deepEqual(shape.tags.filter(tag => ![...portalTagList, ...extra].includes(tag)), []);
+        assert.deepEqual({...shape, tags: 0}, {tags: 0, inItems: 0, inQuotes: 0, inParagraphs: 0, backgrounds: 0, longhand: 0});
+      });
+  }
+
+  // Awkward but real markup. Every word must come out once, in order, apart
+  // from its neighbours, with only lines in quotes and no block in a list item.
+  const awkward = {
+    'italic definition list': '<dl style="font-style:italic"><dt>A1<dd>B1<dt>C1<dd>D1</dl>',
+    'bold definition list': '<dl style="font-weight:600"><dt>A1<dd>B1</dl>',
+    'definition list inside italic text': '<div style="font-style:italic"><dl><dt>A1<dd>B1</dl></div>',
+    'stray content in a definition list': '<dl>A1<dt>B1<dd>C1</dd><p>D1</p><span>E1</span><ul><li>F1</li></ul><dl><dt>G1<dd>H1</dl><dt>I1</dl>',
+    'definition groups with stray content': '<dl><div><dt>A1</dt><dd>B1</dd><p>C1</p>D1</div></dl>',
+    'blocks inside a definition': '<dl><dt><p>A1</p><h3>B1</h3></dt><dd><div><p>C1</p><pre>D1</pre><ul><li>E1</li></ul></div>F1<br>G1</dd></dl>',
+    'definition table': '<dl><dt>A1</dt><dd><div><table><tr><td>B1</td><td>C1</td></tr></table></div></dd></dl>',
+    'definition list in an item': '<ul><li>A1<dl><dt>B1<dd>C1</dl>D1</li></ul>',
+    'definition list in a quote': '<blockquote><dl><dt>A1<dd>B1</dl></blockquote>',
+    'definition list in a cell': '<table><tr><td><dl><dt>A1<dd>B1</dl></td><td>C1</td></tr></table>',
+    'italic quote with a list': '<blockquote style="font-style:italic"><p>A1</p><ul><li>B1</li><li>C1</li></ul><p>D1</p></blockquote>',
+    'italic quote with code and a table': '<blockquote style="font-style:italic"><p>A1</p><pre>B1</pre><table><tr><td>C1</td><td>D1</td></tr></table>E1</blockquote>',
+    'bold callout': '<div class="alert alert-info" style="font-weight:600"><p class="alert-title">A1</p><p>B1</p><ul><li>C1</li></ul></div>',
+    'italic list': '<ul style="font-style:italic"><li>A1</li><li>B1<ul><li>C1</li></ul></li></ul>',
+    'italic table': '<table style="font-style:italic"><thead><tr><th>A1</th><th>B1</th></tr></thead><tbody><tr><td>C1</td><td>D1</td></tr></tbody></table>',
+    'link around blocks': '<div class="callout" data-callout="note"><a href="https://example.com/"><h3>A1</h3><p>B1</p></a></div>',
+    'title on a list item': '<div class="alert alert-info"><ul><li class="alert-title">A1</li><li>B1</li></ul></div>',
+    'title on a cell': '<div class="alert alert-info"><table><tr><td class="alert-title">A1</td><td>B1</td></tr></table></div>',
+    'title on a term': '<div class="alert alert-info"><dl><dt class="alert-title">A1</dt><dd>B1</dd></dl></div>',
+    'title inside a paragraph': '<div class="alert alert-info"><p>A1 <span class="alert-title">B1</span> C1</p></div>',
+    'title of two blocks': '<div class="alert alert-info"><div class="alert-header"><h4>A1</h4><p>B1</p></div><p>C1</p></div>',
+    'title of two lines': '<div class="alert alert-info"><p class="alert-title">A1<br>B1</p><p>C1</p></div>',
+    'title holding a list': '<div class="alert alert-info"><div class="alert-title">A1<ul><li>B1</li></ul><pre>C1</pre></div>D1</div>',
+    'nested callouts': '<div class="admonition note"><p class="admonition-title">A1</p><p>B1</p><div class="admonition tip"><p class="admonition-title">C1</p>D1</div>E1</div>',
+    'callout in an item, then text': '<ul><li>A1<div class="admonition note"><p class="admonition-title">B1</p><p>C1</p></div>D1</li><li>E1</li></ul>',
+    'callout in a numbered item with code': '<ol><li>A1<div class="admonition note"><p class="admonition-title">B1</p><pre>C1</pre></div>D1</li></ol>',
+    'marker in an item': '<ul><li><blockquote><p>[!NOTE]<br>A1</p></blockquote>B1</li></ul>',
+    'loose nested quote': '<blockquote>A1<blockquote>B1</blockquote>C1</blockquote>',
+    'line breaks inside bold': '<blockquote><p><strong>A1<br>B1</strong></p><em>C1<br>D1</em></blockquote>',
+    'details in a cell': '<table><tr><td><details open><summary>A1</summary>B1</details></td><td>C1</td></tr></table>',
+    'details in an item': '<ul><li><details open><summary>A1</summary>B1</details>C1</li></ul>',
+    'details between text': 'A1<details open><summary><h3>B1</h3></summary>C1</details>D1',
+    'figure with a table': '<figure><table><tr><td>A1</td><td>B1</td></tr></table><figcaption>C1</figcaption></figure>D1',
+    'emphasis in headings': '<h2><mark>A1</mark> <ins>B1</ins> <var>C1</var></h2><pre><mark>D1</mark> <kbd>E1</kbd></pre>',
+    'stray inline text in a definition list': '<dl>A1 <b>B1</b> C1<dt>D1<dd>E1</dl>',
+    'title span holding a box': '<div class="alert alert-info"><span class="alert-title"><div>A1</div></span><p>B1</p></div>',
+    'block labels': '<label style="display:block">A1</label><label style="display:block">B1</label><table><tr><td><label style="display:block">C1</label>D1</td><td>E1</td></tr></table>',
+    'text beside a table in a box': '<div>A1 <table><tr><td>B1</td><td>C1</td></tr></table></div><div><table><tr><td>D1</td><td>E1</td></tr></table>F1</div>',
+    'text beside a figure with a table': '<div>A1<figure><table><tr><td>B1</td><td>C1</td></tr></table></figure>D1</div>',
+    'callout holding text and a table': '<div class="admonition note">A1<div class="admonition tip"><table><tr><td>B1</td><td>C1</td></tr></table></div>D1</div>',
+    'quote of text and a table': '<blockquote>A1<table><tr><td>B1</td><td>C1</td></tr></table>D1</blockquote><blockquote><table><tr><td>E1</td><td>F1</td></tr></table>G1</blockquote>',
+    'table in a link or custom tag': '<div>A1<a href="https://example.com/"><table><tr><td>B1</td><td>C1</td></tr></table></a></div><div>D1<x-tbl><table><tr><td>E1</td><td>F1</td></tr></table></x-tbl></div>',
+    'definition with text and a table': '<dl><dd>A1 <sup>2</sup><table><tr><td>B1</td><td>C1</td></tr></table></dd></dl>',
+    'raised text beside a table': '<div>A1 x<sup>2</sup> <table><tr><td>B1</td><td>C1</td></tr></table></div>',
+    'text between a list and code': '<ul><li>A1</li></ul>B1 m<sup>2</sup> is:<pre>C1</pre>',
+    'text between a list and a figure with code': '<div><ul><li>A1</li></ul>B1<figure><pre>C1</pre></figure></div>',
+    'inline callout and details': '<aside class="admonition note" style="display:inline-block"><p class="admonition-title">A1</p><p>B1</p></aside><details open style="display:inline"><summary>C1</summary><p>D1</p></details>',
+    'ordered and nested tasks': '<ol><li><input type="checkbox">A1</li><li>B1<ul><li><label><input type="checkbox" checked></label> C1</li></ul></li></ol>'
+  };
+  for (const target of ['salesforce', 'portal']) for (const [name, markup] of Object.entries(awkward)) {
+    await optioned(`${target}: ${name}`, {target}, `<style>td,th{border:1px solid #d0d7de}</style><div id="target"><p>S1</p>${markup}<p>Z1</p></div>`, async r => {
+      const shape = await inspect(r.html, `return {text: root.textContent,
+        inItems: root.querySelectorAll('li :is(p, div, pre, table, blockquote, br, ul, ol)').length,
+        inQuotes: root.querySelectorAll('blockquote > :not(p.ql-quote-block), blockquote p :is(p, div, table, pre, ul, ol, br)').length,
+        inInline: root.querySelectorAll(':is(p, span, em, strong, u, a, h1, h2, h3) :is(p, div, table, pre, blockquote, ul, ol, li, h1, h2, h3)').length,
+        rows: root.querySelectorAll('table :is(tbody, thead) > :not(tr), tr > :not(td, th), table > :not(thead, tbody, tfoot, caption)').length,
+        tags: [...new Set([...root.querySelectorAll('*')].map(e => e.localName))]}`);
+      const expected = ['S1', ...[...markup.matchAll(/\b[A-Z]1\b/g)].map(m => m[0]), 'Z1'];
+      assert.deepEqual(shape.text.match(/[A-Z]1/g), expected, 'words lost, repeated or moved');
+      const walls = await inspect(r.html, `for (const e of root.querySelectorAll('p, div, li, td, th, pre, h1, h2, h3, blockquote, table')) { e.before(' '); e.append(' '); }
+        for (const br of root.querySelectorAll('br')) br.before(' '); return root.textContent`);
+      assert(!/[A-Z]1[A-Z]1/.test(walls), `words run together: ${walls}`);
+      assert.deepEqual([shape.inItems, shape.inQuotes, shape.inInline, shape.rows], [0, 0, 0, 0]);
+      if (name === 'inline callout and details') assert.match(shape.text, /\u2139\ufe0f\u00a0A1/);
+      if (target === 'portal') assert.deepEqual(shape.tags.filter(tag => !portalTagList.includes(tag)), []);
+      assert(!/data-boksa/.test(r.html));
     });
+  }
+  for (const target of ['salesforce', 'portal']) {
+    await optioned(`${target}: quotes and tables in separate boxes are kept apart`, {target},
+      `<div id="target"><section><blockquote><p>a</p></blockquote></section><section><div><blockquote><p>b</p></blockquote></div></section>
+       <div><table><tr><td>c</td><td>d</td></tr></table></div><div> <table><tr><td>e</td><td>f</td></tr></table></div></div>`,
+      async r => {
+        assert.deepEqual(await inspect(r.html, `return [...root.querySelectorAll('blockquote, table, p:not(.ql-quote-block)')].map(e => e.localName === 'p' ? 'BLANK' : e.textContent.trim())`),
+          ['a', 'BLANK', 'b', 'cd', 'BLANK', 'ef']);
+      });
+    await optioned(`${target}: header cells over several rows, quote alignment, task code`, {target},
+      `<style>td,th{border:1px solid #d0d7de}</style><div id="target"><table><thead><tr><th rowspan="2">a</th><th>b</th></tr><tr><th>c</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+       <blockquote><p style="text-align:center">mid</p></blockquote><ul><li><input type="checkbox"><pre>   K</pre></li></ul>
+       <div class="alert alert-info"><p>see <a class="alert-title" href="https://example.com/x">T</a></p></div></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return {under: [...root.querySelectorAll('th')].map(c => parseFloat(c.style.borderBottomWidth)),
+          align: root.querySelector('.ql-quote-block').style.textAlign, code: root.querySelector('pre').textContent, href: root.querySelector('a').getAttribute('href')}`);
+        assert.deepEqual(shape, {under: [2, 1, 2], align: 'center', code: '   K', href: 'https://example.com/x'});
+      });
+  }
+  const img = alt => `<img alt="${alt}" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">`;
+  for (const target of ['salesforce', 'portal']) {
+    await optioned(`${target}: every line of split text keeps its formatting and link`, {target},
+      `<div id="target"><blockquote><p><strong>A<br>B<br>C</strong></p><p><em><del>D<br>E<br>F</del></em></p></blockquote>
+       <dl><dt>T</dt><dd><a href="https://example.com/x">G<br>H<br>I</a></dd></dl></div>`,
+      async r => {
+        const texts = selector => inspect(r.html, `return [...root.querySelectorAll('${selector}')].map(e => e.textContent.replace(/\\u0336/g, ''))`);
+        assert.deepEqual(await texts('blockquote strong'), ['A', 'B', 'C']);
+        assert.deepEqual(await texts('blockquote em'), ['D', 'E', 'F']);
+        assert.deepEqual(await texts('a[href="https://example.com/x"]'), ['G', 'H', 'I']);
+      });
+    await optioned(`${target}: images and rules in quoted lists, definition lists and links stay`, {target},
+      `<div id="target"><blockquote><ul><li><p>A</p><p>${img('a')}</p></li></ul></blockquote>
+       <dl><dt>T</dt><dd>D</dd><div>${img('b')}</div><p>${img('c')}</p><a href="https://example.com/x">${img('d')}</a><hr></dl>
+       <a href="https://example.com/y"><span>${img('e')}</span><h3>H</h3></a></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return {imgs: [...root.querySelectorAll('img')].map(i => i.alt), linked: [...root.querySelectorAll('a img')].map(i => i.alt),
+          rule: root.querySelectorAll('table').length + (root.textContent.match(/\u2500+/g) || []).length}`);
+        assert.deepEqual(shape, {imgs: ['a', 'b', 'c', 'd', 'e'], linked: ['d', 'e'], rule: 1});
+      });
+    await optioned(`${target}: inline elements without a counterpart stay on their line`, {target},
+      `<div id="target"><ul><li>A (<time>B</time>), <font>C</font>: <x-tag>D</x-tag>, E<ul><li>F</li></ul></li></ul><ul><li>G <cite>H</cite>, I</li></ul></div>`,
+      async r => {
+        assert.deepEqual(await inspect(r.html, `return [...root.querySelectorAll('p, li')].map(e => e.textContent.replace(/\u00a0/g, '_').trim()).filter(Boolean)`),
+          ['•_A (B), C: D, E', '◦_F', 'G H, I']);
+      });
+    await optioned(`${target}: long quotes and definition lists stay fast`, {target},
+      `<div id="target"><blockquote>${'<p>line</p>'.repeat(3000)}</blockquote><dl>${'<dt>a</dt><dd>b</dd>'.repeat(3000)}</dl></div>`,
+      r => { assert(r.elapsed < 6000, `took ${r.elapsed}ms`); });
+  }
+  await optioned('closed details that the page shows anyway are copied', {},
+    `<style>details::details-content{content-visibility:visible}</style><div id="target"><details><summary>T</summary><p>Shown</p></details></div>`,
+    r => { assert(r.html.includes('Shown')); assert(r.text.includes('Shown')); });
+
+  // Folded content is not on screen, so it must not travel in the HTML.
+  for (const target of ['generic', 'salesforce', 'portal']) {
+    await optioned(`${target}: closed details and skipped content are not copied`, {target},
+      `<div id="target"><p>Seen.</p><details><summary>Title</summary>loose SECRET<p>SECRET</p></details>
+       <div style="content-visibility:hidden"><p>SECRET</p></div><details open><summary>Open</summary><p>Shown.</p></details></div>`,
+      async () => {
+        // Chrome adds folded text to Selection.toString() only after a paint.
+        await page.evaluate(() => new Promise(done => requestAnimationFrame(() => setTimeout(done, 150))));
+        const r = await copySelection();
+        assert(!/SECRET/.test(r.html), 'folded text copied');
+        assert(!/SECRET/.test(r.text), 'folded text in the plain text');
+        assert.equal(collapse(r.text), 'Seen.TitleOpenShown.');
+        assert.equal(await page.evaluate(() => document.adoptedStyleSheets.length), 0, 'the page is left as it was');
+        for (const word of ['Seen.', 'Title', 'Open', 'Shown.']) assert(r.html.includes(word), `${word} missing`);
+      });
+  }
 
   await optioned('portal: strikethrough is drawn in the text, not with a tag', {target: 'portal'},
     `<div id="target"><p>Use <del>old value</del> <s>x</s> <span style="text-decoration: line-through">gone</span> now.</p><pre><code>a <del>b</del></code></pre></div>`,

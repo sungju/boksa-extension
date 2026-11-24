@@ -79,20 +79,36 @@ Copies in a shape made for Salesforce Lightning rich-text fields (based on Quill
 
 - A data table takes over the outer border drawn on the container around it. Without one, it gets a border in the colour of its inner lines, in place of Salesforce's black default.
 - On-screen column widths are written as percentages on the first row so that columns are not made equal. Each column keeps enough room for its longest word on one line in a 720px table, taken from the wider columns. Tables are full width, as on screen, and words are not broken inside cells. Header and stripe backgrounds are left out because Salesforce darkens them.
-- Horizontal rules become tables, which Salesforce stores verbatim. When two tables follow each other (for example a table and then a rule), an empty line goes between them, because Salesforce would move the second to the end of the comment.
+- Horizontal rules become tables, which Salesforce stores verbatim. When two tables follow each other (for example a table and then a rule), an empty line goes between them, because Salesforce would move the second to the end of the comment. The same goes for two quotes or two code blocks, which Salesforce would join into one.
 - A paragraph with line breaks (`<br>`), such as a signature, goes into a borderless one-cell table. Salesforce would otherwise make each line a new paragraph and spread the lines apart.
-- Quotes become paragraphs indented one level.
+- Quotes stay quotes, which Salesforce draws with a grey bar and box. See [Richer elements](#richer-elements-in-both-salesforce-targets) below.
+- The header row of a data table has a heavier line under it, in place of its shading.
 - Text outside any paragraph gets a paragraph of its own, because Salesforce would merge it into the next block, such as a heading.
+
+### Richer elements in both Salesforce targets
+
+These use only tags that the Salesforce editor keeps and the Customer Portal allows.
+
+| In the page | In the paste |
+|---|---|
+| Quote (`>`) | A quote box (`p.ql-quote-block` paragraphs inside a `<blockquote>`). Lists in it are typed out, headings become bold lines, and line breaks become lines of their own. A code block, a table, or a list holding one stands between two parts of the quote, because neither side can hold it inside. A quote inside a quote joins the outer one. In a list item or table cell a quote becomes ordinary lines. |
+| Callout: GitHub alerts, Obsidian, MkDocs, Docusaurus, VitePress, MarkdownLens, or a plain quote starting with `[!NOTE]` and the like | A quote box whose title, if it has one, is bold and led by ℹ️ (note, info), ⭐ (tip), ✅ (success), ❗ (important), ❓ (question), ⚠️ (warning) or ⛔ (caution, danger). The title is coloured in Salesforce; the portal removes colours. |
+| Task list | ✅ and ⬜ in place of the boxes, in a real list unless the list is nested or holds code (see Lists above) |
+| Definition list | Bold terms with the definitions indented below |
+| `<sup>`, `<sub>` | Unicode raised and lowered characters (x², H₂O) when every character has one; otherwise plain text |
+| `<ins>`, underline set by a style | `<u>` |
+| `<mark>` | Bold, because no background survives |
+| `<kbd>`, `<samp>` | `<code>` |
+| `<summary>`, `<figcaption>` | Bold; an italic line |
 
 ### Paste target: Salesforce + Customer Portal
 
 For Salesforce comments that are also shown in the Red Hat Customer Portal. The portal shows any tag outside its allowlist as raw HTML text and removes every style attribute (confirmed in the portal's code, November 2026). The allowlist is p, br, strong, em, u, s, lists, a, img, headings, span, pre, code, blockquote, sub, sup, div, b, i, hr and table elements. Everything not listed here works as in the Salesforce target.
 
-- **Data tables** stay real `<table>` elements. The Salesforce editor keeps them as they are (`ql-table-blob`) with the borders Boksa wrote; the portal draws its own borders and a grey header. An empty line goes between two tables in a row.
+- **Data tables** stay real `<table>` elements. The Salesforce editor keeps them as they are (`ql-table-blob`) with the borders Boksa wrote; the portal draws its own borders and a grey header. An empty line goes between two tables in a row. Column alignment is also written as Quill's `ql-align-right` and `ql-align-center` classes and an `align` attribute, because the portal removes the style.
 - **One-cell tables made by Boksa** become paragraphs, because the portal draws a border on every cell. A horizontal rule becomes a line of `─` characters.
-- **Inline code** stays `<code>`. The Salesforce editor now keeps it, and the portal shows it in Consolas on grey. `kbd` and `samp` also become `<code>`.
+- **Inline code** stays `<code>`. The Salesforce editor now keeps it, and the portal shows it in Consolas on grey.
 - **Code blocks** use Salesforce's Code Block format (`<pre class="ql-syntax">`). URLs inside them become links on both sides.
-- **Quotes** (`>`) become `p.ql-quote-block` paragraphs inside a `<blockquote>`, the form the Salesforce editor uses. Salesforce draws a grey bar and box; the portal indents them. A quote that holds a list, code, table or heading, or sits inside a list item or table cell, becomes paragraphs indented one level, because Salesforce cannot hold those inside a quote. A quote inside a quote joins the outer one.
 - **Strikethrough** is drawn by adding U+0336 (combining long stroke overlay) to each character instead of using a tag. The Salesforce editor turns every strikethrough into `<strike>`, which the portal shows as text.
 - **Paragraphs with line breaks** become ordinary paragraphs.
 - **Blank lines:** the portal shows paragraphs with no space between them, so an empty paragraph goes between blocks. The exceptions are typed-out list lines, either side of headings (which have their own margins), and after lists, tables and quotes that have a bottom margin.
@@ -130,7 +146,7 @@ Source class, id and style attributes are not cloned; only allowlisted CSS is wr
 
 Inline styles are written only where an inherited property differs from its parent, or a non-inherited property differs from the browser default. The resulting HTML is about 5 times smaller for a highlighted code block and about 8 times smaller for a large table, which helps with paste targets that truncate large HTML. What you see is the same.
 
-Text that cannot be seen on screen (a `font-size` near 0, fully transparent text, or `opacity: 0`) is not copied. Unlike an ordinary copy, this extension carries styles along, so hidden text would otherwise travel with the paste and stay hidden there.
+Text that cannot be seen on screen (a `font-size` near 0, fully transparent text, or `opacity: 0`) is not copied. Unlike an ordinary copy, this extension carries styles along, so hidden text would otherwise travel with the paste and stay hidden there. The content of a closed `<details>` (only its summary is copied) and of `content-visibility: hidden` elements is left out as well, in every paste target.
 
 One copy writes `text/html` and `text/plain` to the clipboard together. The plain text is the browser's `Selection.toString()` result, not HTML source or the original Markdown. To work on both file and HTTP pages, Boksa first uses a temporary copy event with `execCommand('copy')`, and tries `navigator.clipboard.write()` with `ClipboardItem` if that fails. The former is a deprecated API and may need changes as Chrome changes.
 
