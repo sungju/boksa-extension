@@ -828,6 +828,27 @@
       }
     }
   }
+  // Space at the edge of a heading or paragraph is not shown on screen, but is
+  // kept by the editor. Pages often leave one beside a permalink that stays
+  // hidden until hovered (<h2><a>#</a> Title</h2>), which is not copied.
+  function trimEdges(root) {
+    for (const block of root.querySelectorAll('p, h1, h2, h3, h4, h5, h6')) {
+      if (!block.textContent.trim()) continue;
+      for (const [first, edge] of [[true, collapsible], [false, /[ \t\n\r\f]+$/]]) {
+        for (;;) {
+          let node = block;
+          while (node.hasChildNodes()) node = first ? node.firstChild : node.lastChild;
+          if (node.nodeType !== Node.TEXT_NODE || node.parentElement.closest(preserving)) break;
+          node.data = node.data.replace(edge, '');
+          if (node.data) break;
+          // Nothing left of it, nor of what held only it. A blank cell or item
+          // (a table or list inside the block) is content, and stays.
+          while (node.parentNode !== block && node.parentNode.childNodes.length === 1 && !keepEmpty.has(node.parentNode.localName)) node = node.parentNode;
+          node.remove();
+        }
+      }
+    }
+  }
   // A list holding a code block cannot stay a list in Salesforce: code in
   // an item is hoisted out, a line break in an item starts a new numbered
   // item, and a list interrupted by a code block restarts at 1 because the
@@ -1477,6 +1498,15 @@
         else rename(element, name);
       }
     }
+    // A page may draw its own line under the text instead (a border). Pasting
+    // drops a <u> whose style says it is not underlined, so the tag's own line
+    // takes its place.
+    for (const u of root.querySelectorAll('u')) {
+      // 'initial' is how Chrome reads back a shorthand that leaves the line out.
+      if (!['none', 'initial'].includes(u.style.textDecorationLine)) continue;
+      for (const part of ['line', 'color', 'style', 'thickness']) u.style.removeProperty(`text-decoration-${part}`);
+      u.style.removeProperty('border-bottom');
+    }
     for (const summary of [...root.querySelectorAll('[data-boksa-summary]')]) {
       const inline = ![...summary.children].some(child => blockLevel.has(child.localName));
       if (!inline) { summary.replaceWith(...loosely(summary)); continue; }
@@ -1788,6 +1818,7 @@
       }
     };
     if (salesforce) {
+      trimEdges(wrapper);
       pushInline(wrapper);
       callouts(wrapper);
       richInline(wrapper);

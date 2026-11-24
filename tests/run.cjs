@@ -856,6 +856,41 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         if (target === 'portal') assert.equal(blocks.filter(b => b.endsWith('BLANK')).length, 4);
       });
 
+    // A permalink hidden until hovered is not copied, nor is the space it leaves.
+    await optioned(`${target}: no space is left at the edge of a heading or paragraph`, {target},
+      `<style>.anchor{position:absolute;opacity:0}</style><div id="target">
+        <h1><a class="anchor" href="#a">#</a> Before</h1><h2>After <a class="anchor" href="#b">#</a></h2>
+        <h3><span><a class="anchor" href="#c">#</a> </span><em> Deep</em></h3><h4><a class="anchor" href="#d">#</a> Two <code>words</code> <b>x</b> </h4>
+        <p><a class="anchor" href="#e">#</a> Text with a <a href="https://example.com/">link</a> <a class="anchor" href="#f">#</a></p>
+        <p><a class="anchor" href="#g">#</a> &nbsp;kept&nbsp; </p><p><code style="white-space:pre"> code </code></p>
+        <p><img alt="pic" src="https://example.com/p.png" width="9" height="9"> caption</p></div>`,
+      async r => {
+        const shape = await inspect(r.html, `const blocks = [...root.querySelectorAll('h1, h2, h3, h4, p')].filter(e => e.textContent.trim());
+          return {text: blocks.map(e => e.textContent), empty: root.querySelectorAll('span:empty').length}`);
+        assert.deepEqual(shape.text, ['Before', 'After', 'Deep', 'Two words x', 'Text with a link', '\u00a0kept\u00a0', ' code ', ' caption']);
+        assert.equal(shape.empty, 0, 'what held only the space goes with it');
+      });
+
+    // A table or list inside a heading keeps its blank cells and items.
+    await optioned(`${target}: blank cells and items at the edge of a heading stay`, {target},
+      `<div id="target"><h2>T<table><tbody><tr><td>r</td><td>1</td></tr><tr><td>s</td><td> </td></tr></tbody></table></h2></div>`,
+      async r => assert.deepEqual(await inspect(r.html, `return [...root.querySelectorAll('tr')].map(row => row.cells.length)`), [2, 2]));
+
+    // MarkdownLens draws <ins> with a border; pasting drops a <u> that says "none".
+    await optioned(`${target}: an underline drawn as a border stays an underline`, {target},
+      `<style>ins, u{text-decoration:none dotted 3px rgb(1, 2, 3);border-bottom:2px solid rgb(45, 164, 78)} .bare{text-decoration:none} .wavy{text-decoration:underline wavy red}</style>
+       <div id="target"><p>a <ins>one</ins> <u>two</u> <ins><u>three</u></ins> <u class="wavy">four</u></p><p><ins class="bare">six</ins></p><h2><ins>five</ins></h2></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return [...root.querySelectorAll('u')].map(u => [u.textContent, u.style.textDecorationLine,
+          u.style.textDecorationColor, u.querySelectorAll('u').length, u.style.textDecorationStyle, u.style.borderBottomStyle])`);
+        assert.deepEqual(shape.map(u => u[0]), ['one', 'two', 'three', 'four', 'six', 'five']);
+        assert.deepEqual(shape.map(u => u[1]).filter(line => ['none', 'initial'].includes(line)), [], 'a <u> must not say it is not underlined');
+        assert.equal(shape[3][4], 'wavy', 'a real underline keeps its style');
+        assert.deepEqual(shape.map(u => u[3]), [0, 0, 0, 0, 0, 0]);
+        assert.deepEqual(shape.map(u => u[5]), ['', '', '', 'solid', '', ''], 'one line under the text, not two');
+        assert.equal(shape[0][2], '', 'nothing of the cleared decoration is left');
+      });
+
     await optioned(`${target}: tables get a heavier header line and keep their alignment`, {target},
       `<style>td,th{border:1px solid #d0d7de}th{background:#eee}</style><div id="target"><table><thead><tr><th align="left">Name</th><th align="right">Count</th></tr></thead>
        <tbody><tr><td>a</td><td align="right">10</td></tr></tbody></table></div>`,
@@ -1199,6 +1234,10 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         .map(e => e.localName === 'p' ? (e.textContent.trim() || 'empty') : 'table')`);
       assert.deepEqual(order, ['table', 'empty', 'table', 'Please let us know.']);
     });
+
+  await optioned('generic: the edges of a heading are left alone', {},
+    `<style>.anchor{opacity:0}</style><div id="target"><h1><a class="anchor" href="#a">#</a> Before</h1><p>text</p></div>`,
+    async r => assert.equal(await inspect(r.html, `return root.querySelector('h1').textContent`), ' Before'));
 
   await optioned('prototype keys in stored options are ignored', {constructor: 'x', toString: 'all'}, doc, r => {
     assert(r.html.includes('white-space: pre'));
