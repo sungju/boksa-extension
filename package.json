@@ -1,6 +1,6 @@
 {
   "name": "boksa",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "private": true,
   "description": "Chrome extension that copies a selection of rendered Markdown as rich HTML with the page's computed styles inlined.",
   "homepage": "https://baramsoft.com",

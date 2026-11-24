@@ -891,6 +891,32 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         assert.equal(shape[0][2], '', 'nothing of the cleared decoration is left');
       });
 
+    // Salesforce's editor reads underline and strikethrough from a span's own
+    // text-decoration, and one that has only a colour says "neither".
+    await optioned(`${target}: a span does not undo the underline or strikethrough in or around it`, {target},
+      `<style>blockquote{color:rgb(89, 99, 110)} .g{color:rgb(89, 99, 110)} .d{text-decoration:none dotted 3px red} .w{text-decoration:underline wavy red} .k{text-decoration-line:blink}</style>
+       <div id="target"><blockquote><p>q <u>one</u> <s>cut</s></p></blockquote><p><span class="g">a <u>two</u> <span class="d"><s>b</s></span></span></p>
+       <p><u>c <span class="g">three</span></u> <s>d <span class="g">e</span></s> <small class="g"><u>four</u></small> <s class="g">f <u>five</u></s></p>
+       <ul><li><p class="g">g <u>six</u></p></li></ul><p><span class="w">seven</span> <u class="w">eight</u></p>
+       <p><span style="text-decoration:line-through red">cut</span> <del class="d">x <u>ten</u></del> <span class="g k">y <u>eleven</u></span></p>
+       <p><span class="g" style="border:2px solid green">z <u>twelve</u></span></p>
+       <table><tr><td>k</td><td class="g">h <span class="g"><u>nine</u></span></td></tr></table></div>`,
+      async r => {
+        const shape = await inspect(r.html, `const all = [...root.querySelectorAll('span')];
+          const bad = all.filter(s => !/underline|overline|line-through/.test(s.style.textDecorationLine) && /text-decoration/.test(s.getAttribute('style') || ''));
+          return {bad: bad.map(s => s.outerHTML), spans: all.length, u: [...root.querySelectorAll('u')].map(u => u.textContent.trim()).filter(Boolean).join('|'),
+            s: [...root.querySelectorAll('s')].length, wavy: [...root.querySelectorAll('u')].filter(u => u.style.textDecorationStyle === 'wavy').length,
+            lines: all.map(s => (s.style.textDecorationLine + ' ' + s.style.textDecorationStyle).trim()).filter(Boolean),
+            border: all.some(s => /border-top: 2px solid/.test(s.getAttribute('style')))}`);
+        assert.ok(shape.spans > 3, 'the spans are there to be checked');
+        assert.deepEqual(shape.bad, []);
+        assert.equal(shape.u.replace(/\u0336/g, ''), 'one|two|c three|four|five|six|seven|eight|ten|eleven|twelve|nine');
+        assert.equal(shape.s, target === 'portal' ? 0 : 4);
+        assert.equal(shape.wavy, 1, 'a real underline keeps its style');
+        assert.deepEqual(shape.lines, target === 'portal' ? ['underline wavy'] : ['underline wavy', 'line-through'], 'a span with a line keeps it');
+        assert.ok(shape.border, 'borders stay as salesforceColors wrote them');
+      });
+
     await optioned(`${target}: tables get a heavier header line and keep their alignment`, {target},
       `<style>td,th{border:1px solid #d0d7de}th{background:#eee}</style><div id="target"><table><thead><tr><th align="left">Name</th><th align="right">Count</th></tr></thead>
        <tbody><tr><td>a</td><td align="right">10</td></tr></tbody></table></div>`,

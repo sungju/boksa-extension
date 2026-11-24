@@ -1631,6 +1631,15 @@
     }
     for (const node of texts) node.data = node.data.replace(/[^\n\u0336]/gu, '$&\u0336');
   }
+  // Salesforce's editor takes underline and strikethrough from a span's own
+  // text-decoration, overruling the tags in and around it. One without a line
+  // draws nothing, yet reads as "neither" and would take both away.
+  function plainSpans(root) {
+    for (const span of root.querySelectorAll('span')) {
+      if (/underline|overline|line-through/.test(span.style.textDecorationLine)) continue;
+      for (const part of ['line', 'color', 'style', 'thickness']) span.style.removeProperty(`text-decoration-${part}`);
+    }
+  }
   // Salesforce's font menu has one fixed-width face, Courier, and its editor
   // keeps font-family: courier as its own format. Inline code matches the
   // editor's standard 13px text; code blocks sit one step smaller.
@@ -1884,6 +1893,8 @@
       if (!portal) separateNeighbours(wrapper);
       salesforceFonts(wrapper);
       if (portal) { untable(wrapper); separateNeighbours(wrapper); portalTags(wrapper); portalHeadings(wrapper); spaceBlocks(wrapper); }
+      // Before the colours, which write borders as text that must stay as written.
+      plainSpans(wrapper);
       salesforceColors(wrapper);
     } else if (options.codeBlocks === 'robust') {
       const pres = [...wrapper.querySelectorAll('pre')];
