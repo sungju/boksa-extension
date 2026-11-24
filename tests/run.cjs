@@ -709,7 +709,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
       assert.deepEqual(shape.blocks, ['p:He wrote:', 'p:BLANK', 'blockquote:First line with code.Second line.Nested reply.', 'p:After.']);
       assert.deepEqual(shape.lines, ['p.ql-quote-block:First line with code.', 'p.ql-quote-block:Second line.', 'p.ql-quote-block:Nested reply.']);
       assert.equal(shape.quotes, 1, 'nested quote joins its parent');
-      assert.equal(shape.style, null, 'Salesforce draws its own quote bar');
+      assert(!/border|background|padding/.test(shape.style), 'Salesforce draws its own quote bar');
     });
 
   // --------------------------------------------- elements both sides can draw
@@ -751,7 +751,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         assert.equal(await inspect(r.html, "return root.querySelector('blockquote strong').textContent.replace(/\\u00a0/g, '_')"), titles[source]);
         assert.match(await inspect(r.html, "return root.querySelector('blockquote strong span').style.color"), /^rgb\(/);
         // The line above and below stay outside, and nothing starts with a space.
-        assert(!/>\s+Body/.test(r.html.match(/<blockquote>.*<\/blockquote>/s)[0]), 'leading space in the body');
+        assert(!/>\s+Body/.test(r.html.match(/<blockquote\b.*<\/blockquote>/s)[0]), 'leading space in the body');
         assert(!/data-boksa|class="(?!ql-)/.test(r.html));
       });
     }
@@ -780,6 +780,45 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         assert.deepEqual(blocks.slice(at, at + 3), ['blockquote:a', 'p:BLANK', 'blockquote:b']);
         assert.deepEqual(blocks.slice(-3), ['pre:c', 'p:BLANK', 'pre:d'], 'exactly one empty line');
       });
+
+    // Quill's clipboard adds an empty line after a block when the next one
+    // starts more than half the block's height (margins included) below it.
+    // Checked in an editor with and without paragraph margins of its own.
+    const quillBlanks = (html, host) => inspect(html, `const host = document.body.appendChild(document.createElement('div'));
+      host.id = 'quill'; host.append(root);
+      host.insertAdjacentHTML('beforeend', '<style>#quill p { margin: ${host}; line-height: 18px } #quill blockquote, #quill pre, #quill ul { margin: 16px 0 }</style>');
+      const isBlank = e => e.localName === 'p' && !e.textContent.trim() && e.querySelector('br');
+      const name = e => e.localName + ':' + (e.textContent.trim().slice(0, 6) || 'BLANK');
+      const found = { blanks: 0, added: [] };
+      for (const e of host.querySelectorAll('*')) {
+        if (isBlank(e)) found.blanks++;
+        const next = e.nextElementSibling;
+        if (!next || next.localName === 'style' || e.closest('li, td') || getComputedStyle(e).display !== 'block') continue;
+        const s = getComputedStyle(e), height = e.offsetHeight + parseFloat(s.marginTop) + parseFloat(s.marginBottom);
+        if (next.offsetTop > e.offsetTop + height * 1.5) found.added.push(name(e) + ' / ' + name(next));
+      }
+      host.remove(); return found;`);
+    for (const host of ['0', '16px 0']) {
+      await optioned(`${target}: an empty line between blocks is not doubled by their margins (editor p margin ${host})`, {target},
+        `<style>body{line-height:28px}p{margin:15px 0}blockquote,pre{margin:16px 0}div.box{margin:60px 0}</style><div id="target">
+         <p>one</p><blockquote><p>a</p></blockquote><blockquote><p>b</p></blockquote><p>x</p><pre><code>c</code></pre><pre><code>d</code></pre><p>y</p>
+         <blockquote><p>e</p></blockquote><div class="box"><blockquote><p>f</p></blockquote></div><p>z</p>
+         <div class="box"><blockquote><p>g</p></blockquote></div><blockquote><p>h</p></blockquote></div>`,
+        async r => {
+          const {blanks, added} = await quillBlanks(r.html, host);
+          assert.deepEqual(added.filter(pair => /BLANK|div:f/.test(pair)), []);
+          assert.equal(blanks, target === 'portal' ? 8 : 4);
+        });
+      if (target === 'portal') await optioned(`portal: no empty line is added next to headings and lists (editor p margin ${host})`, {target},
+        `<style>body{line-height:28px}p,ul{margin:20px 0}li{margin:60px 0}h2{margin:48px 0 24px}pre,blockquote{margin:26px 0}</style><div id="target">
+         <h2>Head</h2><p>one</p><p>two</p><h2>Next</h2><p>a</p><pre><code>cmd</code></pre><h2>Third</h2><p>x</p><ul><li>item</li></ul><p>after</p>
+         <h2>Four</h2><blockquote><p>q1</p></blockquote><blockquote><p>q2</p></blockquote><h2>Five</h2><p>End.</p></div>`,
+        async r => {
+          const {blanks, added} = await quillBlanks(r.html, host);
+          assert.deepEqual(added, []);
+          assert.equal(blanks, 4);
+        });
+    }
 
     await optioned(`${target}: task lists use distinct boxes in a real list`, {target},
       `<div id="target"><ul><li><input type="checkbox" checked> Done <b>it</b></li><li><p><input type="checkbox"> <code>later</code></p></li><li>plain</li></ul></div>`,

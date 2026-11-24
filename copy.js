@@ -1092,9 +1092,6 @@
       table.replaceWith(out);
     }
   }
-  // Two tables back to back (a table, then a rule written as a table) make
-  // Salesforce move the second one to the end of the comment, and it joins two
-  // quotes or two code blocks into one. An empty line keeps them apart.
   // What comes before a block once the boxes around it are gone, as in the editor.
   function blockBefore(block, root) {
     const empty = node => (node.nodeType === Node.TEXT_NODE && !node.data.trim()) ||
@@ -1113,16 +1110,40 @@
     }
     return null;
   }
+  // The editor adds an empty line of its own wherever it sees a tall gap, such
+  // as a block's margin. Between two blocks whose gap is already settled, the
+  // margins that face each other go, the browser's defaults included.
+  function closeGap(before, block, root) {
+    const close = (node, side, beyond, edge) => {
+      const flat = element => element.style.setProperty(`margin-${side}`, '0px');
+      flat(node);
+      // The margin of a quote's or list's outermost line shows outside it.
+      if (['blockquote', 'ol', 'ul'].includes(node.localName) && node[edge]) flat(node[edge]);
+      // So does the margin of a box this block opens or closes.
+      for (let box = node.parentElement; box && box !== root && box.localName === 'div' && !node[beyond]; box = box.parentElement) {
+        flat(box);
+        node = box;
+      }
+    };
+    close(before, 'bottom', 'nextElementSibling', 'lastElementChild');
+    close(block, 'top', 'previousElementSibling', 'firstElementChild');
+  }
+  function emptyLineBetween(before, block, root) {
+    closeGap(before, block, root);
+    const empty = document.createElement('p');
+    empty.style.margin = '0px';
+    empty.append(document.createElement('br'));
+    block.before(empty);
+  }
+  // Two tables back to back (a table, then a rule written as a table) make
+  // Salesforce move the second one to the end of the comment, and it joins two
+  // quotes or two code blocks into one. An empty line keeps them apart.
   function separateNeighbours(root) {
     for (const block of [...root.querySelectorAll('table, blockquote, pre')]) {
       if (block.parentElement?.closest('table')) continue;
       const before = blockBefore(block, root);
       if (before?.localName !== block.localName) continue;
-      const spacer = document.createElement('p');
-      spacer.append(document.createElement('br'));
-      block.before(spacer);
-      // The empty line already provides the gap above.
-      block.style.removeProperty('margin-top');
+      emptyLineBetween(before, block, root);
     }
   }
   // The inline content of a block, cut at its line breaks wherever they sit
@@ -1502,7 +1523,6 @@
   // (the lines of a typed-out list, the fields of a converted table).
   const spacedBlocks = new Set(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'ol', 'ul', 'table', 'blockquote']);
   function spaceBlocks(root) {
-    const blank = () => { const p = document.createElement('p'); p.append(document.createElement('br')); return p; };
     const isBlank = block => block.localName === 'p' && !block.textContent.trim() && block.querySelector('br');
     for (const block of [...root.querySelectorAll([...spacedBlocks].join(', '))]) {
       if (block.parentElement?.closest('li, ol, ul, blockquote, table') || isBlank(block)) continue;
@@ -1513,10 +1533,9 @@
       // lists, tables and quotes their own space below (measured on the
       // portal: h2/h3 10px below, ol/ul 16px, table 16px, blockquote 20px,
       // paragraphs none).
-      if (/^h[1-6]$/.test(block.localName) || /^h[1-6]$/.test(before.localName)) continue;
-      if (['ol', 'ul', 'table', 'blockquote'].includes(before.localName)) continue;
-      if (isBlank(before)) continue;
-      block.before(blank());
+      const spaced = /^h[1-6]$/.test(block.localName) || /^(h[1-6]|ol|ul|table|blockquote)$/.test(before.localName);
+      if (spaced) closeGap(before, block, root);
+      else if (!isBlank(before)) emptyLineBetween(before, block, root);
     }
   }
   // The Customer Portal sets body text at 17.92px but h3 at 18px and h4 at
