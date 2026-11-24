@@ -1,0 +1,220 @@
+{
+  "extName": {
+    "message": "Boksa — 서식 유지 복사",
+    "description": "Extension name shown in Chrome and on the Web Store listing."
+  },
+  "extDescription": {
+    "message": "선택한 Markdown을 화면의 스타일이 포함된 Rich HTML로 복사합니다.",
+    "description": "Store listing summary. Chrome truncates past 132 characters."
+  },
+  "actionTitle": {
+    "message": "선택 영역을 스타일과 함께 복사",
+    "description": "Toolbar button tooltip while idle."
+  },
+  "cmdCopy": {
+    "message": "선택 영역을 Rich HTML로 복사",
+    "description": "Keyboard shortcut label on chrome://extensions/shortcuts."
+  },
+  "cmdCopyAlt": {
+    "message": "선택 영역 복사 (대체 단축키)",
+    "description": "Second keyboard shortcut, identical behaviour."
+  },
+  "toastDone": {
+    "message": "스타일 포함 복사 완료 · ⌘V로 붙여넣으세요",
+    "description": "On-page confirmation after a successful copy."
+  },
+  "errNothingCopyable": {
+    "message": "복사할 수 있는 선택 영역이 없습니다.",
+    "description": "Shown when the selection exists but yields no usable content."
+  },
+  "errClipboard": {
+    "message": "클립보드에 쓸 수 없습니다. 페이지에 포커스를 두고 단축키로 다시 시도하세요.",
+    "description": "Shown when both clipboard transports fail."
+  },
+  "badgeBusyTitle": {
+    "message": "복사를 처리하는 중입니다.",
+    "description": "Tooltip when a copy is requested while one is in flight."
+  },
+  "badgeDoneTitle": {
+    "message": "복사 완료 — 웹 에디터에서 ⌘V로 붙여넣으세요.",
+    "description": "Toolbar tooltip alongside the OK badge."
+  },
+  "badgeFailTitle": {
+    "message": "복사 실패: $ERROR$\n파일 URL 접근 허용과 README의 제한 사항을 확인하세요.",
+    "description": "Toolbar tooltip alongside the error badge.",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "페이지가 응답하지 않습니다."
+      }
+    }
+  },
+  "errTimeout": {
+    "message": "페이지가 응답하지 않아 시간이 초과되었습니다.",
+    "description": "Shown when the injected script never returns."
+  },
+  "errUnknown": {
+    "message": "복사 결과를 확인할 수 없습니다.",
+    "description": "Shown when the injected script returns nothing usable."
+  },
+  "optTitle": {
+    "message": "Boksa 설정",
+    "description": "Options page heading and tab title."
+  },
+  "optBackgrounds": {
+    "message": "배경색",
+    "description": "Options group heading."
+  },
+  "optBgAll": {
+    "message": "모두 유지",
+    "description": "Background option: copy every background colour."
+  },
+  "optBgAllHint": {
+    "message": "페이지, 표, 인용문, 코드의 배경색을 화면에 보이는 그대로 복사합니다.",
+    "description": "Explains the 'Keep all' background option."
+  },
+  "optBgCode": {
+    "message": "코드만",
+    "description": "Background option: keep backgrounds only on code."
+  },
+  "optBgCodeHint": {
+    "message": "코드 블록, 인라인 코드, 강조 표시의 배경만 유지하고 나머지는 편집기의 배경을 따릅니다.",
+    "description": "Explains the 'Code only' background option."
+  },
+  "optBgNone": {
+    "message": "사용 안 함",
+    "description": "Background option: drop all background colours."
+  },
+  "optBgNoneHint": {
+    "message": "배경색을 전혀 넣지 않습니다. 어두운 배경을 전제로 한 밝은 글자는 읽을 수 있도록 편집기의 글자색으로 바뀝니다.",
+    "description": "Explains the 'None' background option."
+  },
+  "optCode": {
+    "message": "코드 블록",
+    "description": "Options group heading."
+  },
+  "optCodeStandard": {
+    "message": "표준",
+    "description": "Code block option: plain HTML <pre> block."
+  },
+  "optCodeStandardHint": {
+    "message": "일반 HTML 코드 블록입니다. Notion, Confluence처럼 코드 블록을 지원하는 편집기에 적합합니다.",
+    "description": "Explains the standard code block option."
+  },
+  "optCodeRobust": {
+    "message": "편집기 호환",
+    "description": "Code block option: hard-coded line breaks and indentation."
+  },
+  "optCodeRobustHint": {
+    "message": "줄바꿈과 들여쓰기를 고정하고 상자 모양의 셀에 담습니다. Google Docs나 Gmail처럼 코드가 한 줄로 붙거나 들여쓰기가 사라질 때 선택하세요.",
+    "description": "Explains the editor-safe code block option."
+  },
+  "optHighlight": {
+    "message": "구문 강조 색상 유지",
+    "description": "Checkbox: keep token colours in code blocks."
+  },
+  "optHighlightHint": {
+    "message": "끄면 코드를 한 가지 글자색으로 붙여넣습니다.",
+    "description": "Explains the syntax highlighting checkbox."
+  },
+  "optFonts": {
+    "message": "글꼴",
+    "description": "Options group heading."
+  },
+  "optFontsPage": {
+    "message": "페이지 글꼴",
+    "description": "Font option: copy the page's typefaces."
+  },
+  "optFontsPageHint": {
+    "message": "페이지에서 쓰인 글꼴을 그대로 유지합니다.",
+    "description": "Explains the page fonts option."
+  },
+  "optFontsEditor": {
+    "message": "편집기 글꼴",
+    "description": "Font option: let the editor's typeface apply."
+  },
+  "optFontsEditorHint": {
+    "message": "본문은 편집기의 글꼴을 따르고, 코드는 고정폭 글꼴을 유지합니다.",
+    "description": "Explains the editor font option."
+  },
+  "optShortcuts": {
+    "message": "단축키 변경",
+    "description": "Button that opens chrome://extensions/shortcuts."
+  },
+  "optReset": {
+    "message": "기본값으로 되돌리기",
+    "description": "Button that resets every option."
+  },
+  "optSaved": {
+    "message": "저장됨",
+    "description": "Confirmation after an option changes."
+  },
+  "optSupport": {
+    "message": "도움말 및 지원",
+    "description": "Link to the support page."
+  },
+  "optTextBg": {
+    "message": "글자 배경",
+    "description": "Options group heading: backgrounds behind runs of text."
+  },
+  "optTextBgKeep": {
+    "message": "유지",
+    "description": "Text background option: unchanged."
+  },
+  "optTextBgKeepHint": {
+    "message": "인라인 코드, 강조 표시, 형광펜 글자의 배경색을 그대로 둡니다.",
+    "description": "Explains the keep option for text backgrounds."
+  },
+  "optTextBgSoft": {
+    "message": "연하게",
+    "description": "Text background option: paler, half-saturated colours."
+  },
+  "optTextBgSoftHint": {
+    "message": "밝은 색을 채도가 낮은 아주 연한 색으로 바꿔, 강조는 보이되 글자는 읽기 쉽게 합니다.",
+    "description": "Explains the soften option for text backgrounds."
+  },
+  "optTextBgNone": {
+    "message": "제거",
+    "description": "Text background option: drop them."
+  },
+  "optTextBgNoneHint": {
+    "message": "인라인 코드, 강조 표시, 형광펜 글자 뒤에 배경색을 넣지 않습니다. 코드 블록은 위의 배경색 설정을 따릅니다.",
+    "description": "Explains the remove option for text backgrounds."
+  },
+  "optSoftLighten": {
+    "message": "흰색 쪽으로 밝게",
+    "description": "Slider: how far light colours move toward white when softening."
+  },
+  "optSoftSaturation": {
+    "message": "채도 유지",
+    "description": "Slider: how much of the colour's saturation is kept when softening."
+  },
+  "optTarget": {
+    "message": "붙여넣을 곳",
+    "description": "Options group heading: which editor the copy is shaped for."
+  },
+  "optTargetGeneric": {
+    "message": "모든 편집기",
+    "description": "Target option: standard HTML."
+  },
+  "optTargetGenericHint": {
+    "message": "대부분의 편집기, 메일, 문서가 이해하는 표준 HTML입니다.",
+    "description": "Explains the generic target."
+  },
+  "optTargetSalesforce": {
+    "message": "Salesforce",
+    "description": "Target option: Salesforce Lightning rich-text fields."
+  },
+  "optTargetSalesforceHint": {
+    "message": "Salesforce Lightning 서식 입력란(케이스 코멘트, 이메일)에 맞춥니다. Salesforce는 저장할 때 밝은 색을 모두 어둡게 바꾸므로 배경색은 넣지 않습니다. 코드는 Salesforce의 코드 블록 형식을 쓰고, 인라인 코드는 고정폭 글꼴과 글자색으로 표시되며, 목록의 순서와 번호가 유지됩니다. 배경색·글자 배경 설정은 적용되지 않습니다.",
+    "description": "Explains the Salesforce target."
+  },
+  "optTargetPortal": {
+    "message": "Salesforce + 고객 포털",
+    "description": "Target option: Salesforce comments that are also shown in the Red Hat Customer Portal."
+  },
+  "optTargetPortalHint": {
+    "message": "Salesforce와 같되, Red Hat 고객 포털에서도 읽는 댓글용입니다. 고객 포털은 모든 스타일을 지우고 모르는 태그를 HTML 글자 그대로 보여 줍니다. 데이터 표·인라인 코드·인용문은 양쪽 모두 표시하므로 그대로 두고, 코드 블록은 Salesforce의 코드 블록 형식으로, 가로줄은 문자 줄로, 취소선은 글자에 직접 그어 표시합니다.",
+    "description": "Explains the Salesforce + Customer Portal target."
+  }
+}

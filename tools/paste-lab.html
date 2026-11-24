@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boksa paste lab</title>
+<!--
+  Finds out which HTML shape a given web editor keeps intact for "a code block
+  inside a numbered list item". Each button puts one candidate on the
+  clipboard (text/html + text/plain); paste each into the target editor and
+  note which one keeps the code under its own item with the numbering intact.
+-->
+<style>
+:root { color-scheme: light dark; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --card:#f6f8fa; --accent:#4f46e5; --bg:#fff; }
+@media (prefers-color-scheme: dark) { :root { --fg:#e6edf3; --muted:#9198a1; --line:#3d444d; --card:#151b23; --accent:#a5a0ff; --bg:#0d1117; } }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui,-apple-system,sans-serif; }
+main { max-width:760px; margin:0 auto; padding:28px 16px 60px; }
+h1 { font-size:22px; margin:0 0 6px; }
+p.lede { color:var(--muted); margin:0 0 22px; }
+.case { border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:0 0 12px; display:grid; grid-template-columns:auto 1fr; gap:4px 14px; align-items:start; }
+.case b { font-size:18px; color:var(--accent); grid-row:span 2; }
+.case h2 { font-size:15px; margin:0; }
+.case p { margin:0; color:var(--muted); font-size:14px; }
+.case button { grid-column:2; justify-self:start; margin-top:8px; font:inherit; padding:5px 14px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+.case button.done { border-color:#1a7f37; color:#1a7f37; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paste lab: code block inside a numbered list</h1>
+  <p class="lede">Click a button, paste into the editor with ⌘V, and note which versions come out right. Clear the editor between tries.</p>
+  <div id="cases"></div>
+</main>
+<script>
+'use strict';
+const mono = 'font-family: Menlo, Consolas, monospace; font-size: 13px;';
+const box = `background-color: rgb(246, 248, 250); padding: 10px 14px; border-radius: 6px; ${mono}`;
+const one = '#&nbsp;sysctl&nbsp;-w&nbsp;kernel.printk="3&nbsp;4&nbsp;1&nbsp;3"';
+const two = 'kernel.printk&nbsp;=&nbsp;3&nbsp;4&nbsp;1&nbsp;3';
+const item1 = 'Dynamically limit the printk log levels to prevent debug or informational messages from being output to the serial console:';
+const item2 = 'To make this change persistent, create <code style="' + mono + '">/etc/sysctl.d/99-printk.conf</code> with:';
+const tail = '<p>This restricts console logging to level 3 (KERN_ERR) and higher.</p><p>Please let us know if you have any questions or need further assistance.</p>';
+const table = code => `<table style="border-collapse: collapse; width: 100%;"><tbody><tr><td style="${box}">${code}</td></tr></tbody></table>`;
+
+const cases = [
+  ['A', 'Current editor-safe', 'Paragraph + one-cell table inside each list item (what Boksa sends today).',
+    `<ol><li><p>${item1}</p>${table(one)}</li><li><p>${item2}</p>${table(two)}</li></ol>${tail}`],
+  ['B', 'Standard <pre>', 'Paragraph + <pre> inside each list item.',
+    `<ol><li><p>${item1}</p><pre style="${box}">${one}</pre></li><li><p>${item2}</p><pre style="${box}">${two}</pre></li></ol>${tail}`],
+  ['C', 'Inline in the item', 'No blocks inside the item: text, a line break, then the code as a shaded monospace span.',
+    `<ol><li>${item1}<br><span style="${box}">${one}</span></li><li>${item2}<br><span style="${box}">${two}</span></li></ol>${tail}`],
+  ['D', 'Split list, table between', 'The list is closed before each code block and resumed with start="2"; the code is a one-cell table.',
+    `<ol><li>${item1}</li></ol>${table(one)}<ol start="2"><li>${item2}</li></ol>${table(two)}${tail}`],
+  ['E', 'Split list, <pre> between', 'As D, but the code is a <pre> block.',
+    `<ol><li>${item1}</li></ol><pre style="${box}">${one}</pre><ol start="2"><li>${item2}</li></ol><pre style="${box}">${two}</pre>${tail}`],
+  ['F', 'Unwrapped item text + table', 'Like A, but the item text is not wrapped in <p>.',
+    `<ol><li>${item1}${table(one)}</li><li>${item2}${table(two)}</li></ol>${tail}`],
+];
+
+// Horizontal rules: many editors have no <hr> of their own and drop it.
+const above = '<p>Text above the line.</p>', below = '<p>Text below the line.</p>';
+const rules = [
+  ['R1', 'Plain <hr>', 'What Boksa sends today: an <hr> with a solid top border.',
+    `${above}<hr style="border-width: 2px 0 0; border-style: solid none none; border-top-color: rgb(208, 215, 222); margin: 16px 0;">${below}`],
+  ['R2', 'One-cell table with a border', 'An empty full-width table cell whose top border draws the line.',
+    `${above}<table style="border-collapse: collapse; width: 100%; margin: 16px 0;"><tbody><tr><td style="border-top: 2px solid rgb(208, 215, 222); padding: 0; height: 1px; font-size: 1px; line-height: 1px;">&nbsp;</td></tr></tbody></table>${below}`],
+  ['R3', 'Paragraph with a bottom border', 'An empty paragraph whose bottom border draws the line.',
+    `${above}<p style="border-bottom: 2px solid rgb(208, 215, 222); margin: 16px 0; line-height: 1px; font-size: 1px;">&nbsp;</p>${below}`],
+  ['R4', 'Line of characters', 'A paragraph of box-drawing characters (─) in the rule colour.',
+    `${above}<p style="color: rgb(208, 215, 222); letter-spacing: -1px; margin: 12px 0;">${'─'.repeat(60)}</p>${below}`],
+  ['R5', 'Bare <hr>', 'An <hr> with no styling at all, using the editor’s own look.',
+    `${above}<hr>${below}`],
+];
+
+// One paste exercising everything Boksa emits, each line labelled [Pn] so the
+// editor's resulting HTML can be matched back to what went in.
+const fontRule = f => `font-family: ${f};`;
+const probe = [
+  '<h1>[P1] Heading 1</h1>', '<h2>[P2] Heading 2</h2>', '<h3>[P3] Heading 3</h3>', '<h4>[P4] Heading 4</h4>',
+  '<p>[P5] <strong>bold</strong> <em>italic</em> <u>underline</u> <s>strike</s> <sub>sub</sub> <sup>sup</sup> <a href="https://baramsoft.com">link</a></p>',
+  ...['Menlo, monospace', '"Courier New", Courier, monospace', 'courier', 'monospace', 'Consolas', 'Salesforce Sans, Arial, sans-serif', 'Arial', 'Georgia, serif']
+    .map((f, i) => `<p>[P6.${i + 1}] <span style='${fontRule(f)}'>font ${f.replace(/"/g, '')}</span></p>`),
+  ...['8px', '10px', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '32px']
+    .map((z, i) => `<p>[P7.${i + 1}] <span style="font-size: ${z}">size ${z}</span></p>`),
+  '<p>[P8] <span style="color: rgb(207, 34, 46)">red text</span> <span style="background-color: rgb(255, 248, 197)">yellow bg</span> <span style="color: #0969da; background-color: rgba(175, 184, 193, 0.2)">rgba bg</span></p>',
+  '<p>[P9] inline <code>code element</code> and <code style="font-family: Menlo, monospace; background-color: rgb(246, 248, 250); padding: 1px 6px; border-radius: 6px">styled code</code> and <kbd>kbd</kbd> and <mark>mark</mark></p>',
+  '<pre style="background-color: rgb(246, 248, 250); font-family: Menlo, monospace">[P10] pre line 1\n    indented line 2</pre>',
+  '<blockquote style="border-left: 4px solid rgb(208, 215, 222); padding-left: 12px; color: rgb(89, 99, 110)">[P11] blockquote</blockquote>',
+  '<ul><li>[P12] bullet<ul><li>[P12.1] nested bullet<ul><li>[P12.2] third level</li></ul></li></ul></li></ul>',
+  '<ol start="3"><li>[P13] ordered from 3<ol><li>[P13.1] nested ordered</li></ol></li><li>[P13.2] next</li></ol>',
+  '<ol><li>[P14] item text<br><span style="font-family: Menlo, monospace; background-color: rgb(246, 248, 250); padding: 1px 6px"># command line</span></li></ol>',
+  '<table style="border-collapse: collapse"><tbody><tr><th style="border: 1px solid rgb(208, 215, 222); background-color: rgb(246, 248, 250)">[P15] head</th><td style="border: 1px solid rgb(208, 215, 222)">cell</td></tr></tbody></table>',
+  '<table style="border-collapse: collapse; width: 100%"><tbody><tr><td style="border-top: 2px solid rgb(208, 215, 222); padding: 0; height: 1px; font-size: 1px; line-height: 1px">&nbsp;</td></tr></tbody></table>',
+  '<p>[P16] after the rule table</p>',
+  '<p style="text-align: center">[P17] centred</p><p style="text-align: right">[P18] right</p>',
+  '<p style="margin-left: 40px">[P19] margin-left 40px</p><p style="padding-left: 2em">[P20] padding-left 2em</p>',
+  '<div>[P21] plain div</div><p>[P22] line one<br>line two after br</p><p>[P23] a&nbsp;&nbsp;&nbsp;b (non-breaking spaces)</p>',
+].join('\n');
+const probeCase = ['P', 'Salesforce probe', 'Everything Boksa can emit, each line labelled. Paste once, then run the Console snippet shown in the chat to copy the editor’s resulting HTML.', probe];
+
+const container = document.getElementById('cases');
+const section = title => {
+  const heading = document.createElement('h2');
+  heading.textContent = title;
+  heading.style.cssText = 'font-size:17px;margin:26px 0 10px';
+  container.append(heading);
+};
+section('Code block inside a numbered list');
+for (const [letter, title, note, html] of [...cases, ['', 'Horizontal line (---)'], ...rules, ['', 'What the editor keeps'], probeCase]) {
+  if (!letter) { section(title); continue; }
+  const card = document.createElement('div');
+  card.className = 'case';
+  card.innerHTML = `<b>${letter}</b><h2></h2><p></p><button type="button">Copy ${letter}</button>`;
+  card.querySelector('h2').textContent = title;
+  card.querySelector('p').textContent = note;
+  const button = card.querySelector('button');
+  button.addEventListener('click', () => {
+    const plain = new DOMParser().parseFromString(html, 'text/html').body.innerText;
+    const listener = event => {
+      event.clipboardData.setData('text/html', html);
+      event.clipboardData.setData('text/plain', plain);
+      event.preventDefault();
+    };
+    document.addEventListener('copy', listener);
+    document.execCommand('copy');
+    document.removeEventListener('copy', listener);
+    for (const other of container.querySelectorAll('button')) { other.classList.remove('done'); other.textContent = other.textContent.replace(' ✓', ''); }
+    button.classList.add('done');
+    button.textContent += ' ✓';
+  });
+  container.append(card);
+}
+</script>
+</body>
+</html>

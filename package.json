@@ -1,0 +1,22 @@
+{
+  "name": "boksa",
+  "version": "1.5.6",
+  "private": true,
+  "description": "Chrome extension that copies a selection of rendered Markdown as rich HTML with the page's computed styles inlined.",
+  "homepage": "https://baramsoft.com",
+  "bugs": {
+    "url": "https://baramsoft.com/support/"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node tests/run.cjs",
+    "icons": "node tools/make-icons.cjs",
+    "package": "rm -rf dist && mkdir -p dist/boksa && cp -R manifest.json background.js color.js copy.js options.html options.js README.md PRIVACY.md LICENSE icons _locales dist/boksa/ && cd dist && zip -qr ../boksa-$npm_package_version.zip boksa && echo \"built boksa-$npm_package_version.zip\"",
+    "package:store": "npm run package && cd dist/boksa && zip -qr ../../boksa-store-$npm_package_version.zip . && echo \"built boksa-store-$npm_package_version.zip (manifest at archive root, for Web Store upload)\"",
+    "store-assets": "node tools/make-store-assets.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

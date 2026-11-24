@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipboard inspector</title>
+<!--
+  Shows exactly what a copy put on the clipboard, so a paste problem can be
+  traced to either the copied HTML or the editor receiving it. Press ⌘V on
+  this page; nothing leaves the page unless you click Save.
+-->
+<style>
+:root { color-scheme: light dark; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --card:#f6f8fa; --accent:#4f46e5; --bg:#fff; --warn:#bf3989; }
+@media (prefers-color-scheme: dark) { :root { --fg:#e6edf3; --muted:#9198a1; --line:#3d444d; --card:#151b23; --accent:#a5a0ff; --bg:#0d1117; --warn:#ff80c8; } }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui,-apple-system,sans-serif; }
+main { max-width:980px; margin:0 auto; padding:24px 16px 60px; }
+h1 { font-size:20px; margin:0 0 4px; }
+.lede { color:var(--muted); margin:0 0 16px; }
+.bar { display:flex; gap:10px; align-items:center; margin:0 0 14px; flex-wrap:wrap; }
+button { font:inherit; padding:5px 14px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+h2 { font-size:15px; margin:20px 0 6px; }
+pre { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; white-space:pre-wrap; word-break:break-all; max-height:420px; overflow:auto; font:12px/1.5 Menlo,Consolas,monospace; margin:0; }
+.rendered { border:1px solid var(--line); border-radius:8px; background:#fff; width:100%; height:420px; }
+mark.odd { background:var(--warn); color:#fff; border-radius:3px; padding:0 2px; }
+#empty { color:var(--muted); border:2px dashed var(--line); border-radius:10px; padding:40px; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Clipboard inspector</h1>
+  <p class="lede">Copy with Boksa, then click this page and press ⌘V. It shows the HTML and plain text exactly as copied.</p>
+  <div class="bar">
+    <button type="button" id="save" disabled>Save as file</button>
+    <span id="note"></span>
+  </div>
+  <div id="empty">Press ⌘V here</div>
+  <div id="out" hidden>
+    <h2>Structure — text in each element, invisible and unusual characters marked</h2>
+    <pre id="tree"></pre>
+    <h2>Rendered</h2>
+    <iframe class="rendered" id="rendered" sandbox title="Rendered clipboard HTML"></iframe>
+    <h2>text/html</h2>
+    <pre id="html"></pre>
+    <h2>text/plain</h2>
+    <pre id="plain"></pre>
+  </div>
+</main>
+<script>
+'use strict';
+let captured = null;
+// Visible stand-ins for characters that are easy to miss.
+const visible = text => text
+  .replace(/ /g, '⍽').replace(/\t/g, '→').replace(/\n/g, '↵')
+  .replace(/[​-‏⁠﻿­]/g, c => `‹U+${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}›`)
+  .replace(/[-]/g, c => `‹PUA U+${c.charCodeAt(0).toString(16).toUpperCase()}›`);
+
+function outline(root) {
+  const lines = [];
+  const walk = (node, depth) => {
+    for (const child of node.childNodes) {
+      const pad = '  '.repeat(depth);
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (child.data.length) lines.push(`${pad}"${visible(child.data)}"`);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const style = child.getAttribute('style');
+        const font = style && /font-family:\s*([^;]+)/.exec(style)?.[1];
+        const list = style && /list-style-type:\s*([^;]+)/.exec(style)?.[1];
+        const bits = [font && `font: ${font}`, list && `list-style: ${list}`].filter(Boolean).join(', ');
+        lines.push(`${pad}<${child.localName}>${bits ? `  [${bits}]` : ''}`);
+        walk(child, depth + 1);
+      }
+    }
+  };
+  walk(root, 0);
+  return lines.join('\n');
+}
+
+document.addEventListener('paste', event => {
+  event.preventDefault();
+  const html = event.clipboardData.getData('text/html');
+  const plain = event.clipboardData.getData('text/plain');
+  captured = {html, plain};
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  document.getElementById('tree').textContent = html ? outline(doc.body) : '(no text/html on the clipboard)';
+  // A sandboxed frame without allow-scripts: pasted markup may carry event
+  // handlers (an <img onerror>) that would run if rendered in this page.
+  document.getElementById('rendered').srcdoc = '<meta charset="utf-8">' + html;
+  document.getElementById('html').textContent = html;
+  document.getElementById('plain').textContent = plain;
+  document.getElementById('empty').hidden = true;
+  document.getElementById('out').hidden = false;
+  document.getElementById('save').disabled = false;
+  document.getElementById('note').textContent = `${html.length.toLocaleString()} bytes of HTML, ${plain.length.toLocaleString()} characters of text`;
+});
+
+document.getElementById('save').addEventListener('click', () => {
+  if (!captured) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const file = `<!doctype html><meta charset="utf-8"><title>Boksa clipboard ${stamp}</title>\n` +
+    `<!-- text/plain:\n${captured.plain.replace(/-->/g, '--&gt;')}\n-->\n${captured.html}`;
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([file], {type: 'text/html'}));
+  link.download = `boksa-clipboard-${stamp}.html`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+});
+</script>
+</body>
+</html>

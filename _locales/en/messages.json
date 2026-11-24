@@ -1,0 +1,220 @@
+{
+  "extName": {
+    "message": "Boksa — Markdown Rich Copy",
+    "description": "Extension name shown in Chrome and on the Web Store listing."
+  },
+  "extDescription": {
+    "message": "Copy selected Markdown as rich HTML with the page's own styles intact.",
+    "description": "Store listing summary. Chrome truncates past 132 characters."
+  },
+  "actionTitle": {
+    "message": "Copy the selection with its styles",
+    "description": "Toolbar button tooltip while idle."
+  },
+  "cmdCopy": {
+    "message": "Copy the selection as rich HTML",
+    "description": "Keyboard shortcut label on chrome://extensions/shortcuts."
+  },
+  "cmdCopyAlt": {
+    "message": "Copy the selection (alternate shortcut)",
+    "description": "Second keyboard shortcut, identical behaviour."
+  },
+  "toastDone": {
+    "message": "Copied with styles — paste into your editor",
+    "description": "On-page confirmation after a successful copy."
+  },
+  "errNothingCopyable": {
+    "message": "The selection contains nothing that can be copied.",
+    "description": "Shown when the selection exists but yields no usable content."
+  },
+  "errClipboard": {
+    "message": "Could not write to the clipboard. Focus the page and try the shortcut again.",
+    "description": "Shown when both clipboard transports fail."
+  },
+  "badgeBusyTitle": {
+    "message": "Already copying…",
+    "description": "Tooltip when a copy is requested while one is in flight."
+  },
+  "badgeDoneTitle": {
+    "message": "Copied — paste into your editor.",
+    "description": "Toolbar tooltip alongside the OK badge."
+  },
+  "badgeFailTitle": {
+    "message": "Copy failed: $ERROR$\nCheck that file URL access is allowed, and see the limitations in the README.",
+    "description": "Toolbar tooltip alongside the error badge.",
+    "placeholders": {
+      "error": {
+        "content": "$1",
+        "example": "The page stopped responding."
+      }
+    }
+  },
+  "errTimeout": {
+    "message": "The page stopped responding, so the copy timed out.",
+    "description": "Shown when the injected script never returns."
+  },
+  "errUnknown": {
+    "message": "The result of the copy could not be confirmed.",
+    "description": "Shown when the injected script returns nothing usable."
+  },
+  "optTitle": {
+    "message": "Boksa settings",
+    "description": "Options page heading and tab title."
+  },
+  "optBackgrounds": {
+    "message": "Backgrounds",
+    "description": "Options group heading."
+  },
+  "optBgAll": {
+    "message": "Keep all",
+    "description": "Background option: copy every background colour."
+  },
+  "optBgAllHint": {
+    "message": "Page, table, quote and code backgrounds are copied as they appear on screen.",
+    "description": "Explains the 'Keep all' background option."
+  },
+  "optBgCode": {
+    "message": "Code only",
+    "description": "Background option: keep backgrounds only on code."
+  },
+  "optBgCodeHint": {
+    "message": "Keeps the boxes behind code blocks, inline code and highlighted text; everything else pastes on the editor's own background.",
+    "description": "Explains the 'Code only' background option."
+  },
+  "optBgNone": {
+    "message": "None",
+    "description": "Background option: drop all background colours."
+  },
+  "optBgNoneHint": {
+    "message": "No background colours at all. Light text that was meant for a dark background switches to the editor's text colour so it stays readable.",
+    "description": "Explains the 'None' background option."
+  },
+  "optCode": {
+    "message": "Code blocks",
+    "description": "Options group heading."
+  },
+  "optCodeStandard": {
+    "message": "Standard",
+    "description": "Code block option: plain HTML <pre> block."
+  },
+  "optCodeStandardHint": {
+    "message": "A normal HTML code block. Best for editors that understand code blocks, such as Notion or Confluence.",
+    "description": "Explains the standard code block option."
+  },
+  "optCodeRobust": {
+    "message": "Editor-safe",
+    "description": "Code block option: hard-coded line breaks and indentation."
+  },
+  "optCodeRobustHint": {
+    "message": "Line breaks and indentation are fixed in place inside a boxed cell. Choose this if code pastes as a single line or loses its indentation, as in Google Docs or Gmail.",
+    "description": "Explains the editor-safe code block option."
+  },
+  "optHighlight": {
+    "message": "Keep syntax highlighting",
+    "description": "Checkbox: keep token colours in code blocks."
+  },
+  "optHighlightHint": {
+    "message": "Turn off to paste code in a single text colour.",
+    "description": "Explains the syntax highlighting checkbox."
+  },
+  "optFonts": {
+    "message": "Fonts",
+    "description": "Options group heading."
+  },
+  "optFontsPage": {
+    "message": "Page fonts",
+    "description": "Font option: copy the page's typefaces."
+  },
+  "optFontsPageHint": {
+    "message": "Text keeps the typeface used on the page.",
+    "description": "Explains the page fonts option."
+  },
+  "optFontsEditor": {
+    "message": "Editor font",
+    "description": "Font option: let the editor's typeface apply."
+  },
+  "optFontsEditorHint": {
+    "message": "Text takes on the editor's typeface; code stays monospaced.",
+    "description": "Explains the editor font option."
+  },
+  "optShortcuts": {
+    "message": "Change keyboard shortcuts",
+    "description": "Button that opens chrome://extensions/shortcuts."
+  },
+  "optReset": {
+    "message": "Restore defaults",
+    "description": "Button that resets every option."
+  },
+  "optSaved": {
+    "message": "Saved",
+    "description": "Confirmation after an option changes."
+  },
+  "optSupport": {
+    "message": "Help & support",
+    "description": "Link to the support page."
+  },
+  "optTextBg": {
+    "message": "Behind text",
+    "description": "Options group heading: backgrounds behind runs of text."
+  },
+  "optTextBgKeep": {
+    "message": "Keep",
+    "description": "Text background option: unchanged."
+  },
+  "optTextBgKeepHint": {
+    "message": "Inline code, highlights and marked text keep their background colour.",
+    "description": "Explains the keep option for text backgrounds."
+  },
+  "optTextBgSoft": {
+    "message": "Soften",
+    "description": "Text background option: paler, half-saturated colours."
+  },
+  "optTextBgSoftHint": {
+    "message": "Turns bright colours into a faint, greyed tint, so highlights stay visible without making the text hard to read.",
+    "description": "Explains the soften option for text backgrounds."
+  },
+  "optTextBgNone": {
+    "message": "Remove",
+    "description": "Text background option: drop them."
+  },
+  "optTextBgNoneHint": {
+    "message": "No colour behind inline code, highlights or marked text. Code blocks follow the Backgrounds setting above.",
+    "description": "Explains the remove option for text backgrounds."
+  },
+  "optSoftLighten": {
+    "message": "Lighten toward white",
+    "description": "Slider: how far light colours move toward white when softening."
+  },
+  "optSoftSaturation": {
+    "message": "Keep saturation",
+    "description": "Slider: how much of the colour's saturation is kept when softening."
+  },
+  "optTarget": {
+    "message": "Paste target",
+    "description": "Options group heading: which editor the copy is shaped for."
+  },
+  "optTargetGeneric": {
+    "message": "Any editor",
+    "description": "Target option: standard HTML."
+  },
+  "optTargetGenericHint": {
+    "message": "Standard HTML that most editors, email clients and documents understand.",
+    "description": "Explains the generic target."
+  },
+  "optTargetSalesforce": {
+    "message": "Salesforce",
+    "description": "Target option: Salesforce Lightning rich-text fields."
+  },
+  "optTargetSalesforceHint": {
+    "message": "Shaped for Salesforce Lightning rich-text fields (case comments, email). Salesforce darkens every light colour it saves, so backgrounds are left out; code uses Salesforce's own Code Block format, inline code stays monospaced and coloured, and lists keep their order and numbering. The Backgrounds and Behind text settings do not apply.",
+    "description": "Explains the Salesforce target."
+  },
+  "optTargetPortal": {
+    "message": "Salesforce + Customer Portal",
+    "description": "Target option: Salesforce comments that are also shown in the Red Hat Customer Portal."
+  },
+  "optTargetPortalHint": {
+    "message": "Like Salesforce, for comments also read in the Red Hat Customer Portal, which removes every style and shows unknown tags as raw HTML. Data tables, inline code and quotes stay real, so both sides draw them; code blocks use Salesforce's Code Block format, rules become a line of characters, and strikethrough is drawn into the text.",
+    "description": "Explains the Salesforce + Customer Portal target."
+  }
+}
