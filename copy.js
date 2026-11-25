@@ -204,12 +204,12 @@
     note: {icon: '\u2139\ufe0f', color: 'rgb(9, 105, 218)'}, tip: {icon: '\u2b50', color: 'rgb(26, 127, 55)'},
     success: {icon: '\u2705', color: 'rgb(26, 127, 55)'}, important: {icon: '\u2757', color: 'rgb(130, 80, 223)'},
     question: {icon: '\u2753', color: 'rgb(130, 80, 223)'}, warning: {icon: '\u26a0\ufe0f', color: 'rgb(154, 103, 0)'},
-    caution: {icon: '\u26d4', color: 'rgb(207, 34, 46)'}
+    caution: {icon: '\u26d4', color: 'rgb(207, 34, 46)'}, quote: {icon: '\u275d', color: 'rgb(89, 99, 110)'}
   };
   const calloutKinds = new Map(Object.entries({
     note: 'note info abstract summary tldr todo seealso example', tip: 'tip hint', success: 'success check done',
     important: 'important', question: 'question help faq', warning: 'warning attention',
-    caution: 'caution danger error failure fail bug'
+    caution: 'caution danger error failure fail bug', quote: 'quote cite'
   }).flatMap(([kind, names]) => names.split(' ').map(name => [name, kind])));
   const calloutBox = /^(?:[a-z]+-)?(?:alert|callout|admonition|custom-block)$/;
   const calloutName = /^(?:[a-z]+-)?(?:alert|callout|admonition)-{1,2}([a-z]+)$/;
@@ -243,6 +243,156 @@
   // loaded yet (loading="lazy"), and Boksa asks the network for nothing. The
   // address waits under a name no page can know, and becomes src in the string.
   const sourceName = `data-boksa-src-${crypto.getRandomValues(new Uint32Array(2)).join('-')}`;
+  // Text a page marks as not selectable (line numbers, an outline, the label of
+  // a code block, a heading's permalink) is left out of an ordinary copy, and of
+  // the plain text here. A page that marks all of it copies in full.
+  let leaveOutUnselectable = true;
+  const unselectable = computed => leaveOutUnselectable && computed?.userSelect === 'none';
+  // A cell whose text is all left out still holds its place in the row, or the
+  // cells after it would move under another heading. A whole column of such
+  // cells is a gutter (line numbers) and goes; a heading alone does not make one.
+  const selectableText = node => {
+    const texts = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    while (texts.nextNode()) {
+      const {data, parentElement} = texts.currentNode;
+      if (/\S/.test(data) && getComputedStyle(parentElement).userSelect !== 'none') return true;
+    }
+    return false;
+  };
+  const gutters = new WeakMap();
+  function inGutter(cell) {
+    const table = cell.closest('table');
+    if (!table) return false;
+    if (!gutters.has(table)) {
+      const rows = [...table.rows], columns = new Set();
+      if (!rows.some(row => [...row.cells].some(other => other.colSpan > 1 || other.rowSpan > 1))) {
+        for (let index = 0; index < (rows[0]?.cells.length ?? 0); index++) {
+          const cells = rows.map(row => row.cells[index]);
+          if (cells.every(other => other && !selectableText(other) && !other.querySelector('img, input, svg, canvas'))
+            && cells.some((other, at) => (at > 0 || rows.length === 1) && other.textContent.trim())) columns.add(index);
+        }
+      }
+      gutters.set(table, columns);
+    }
+    return gutters.get(table).has(cell.cellIndex);
+  }
+  // What a page keeps of a formula or a diagram is drawn with positioning or as
+  // SVG, which no editor holds. Its source says the same thing as code.
+  // KaTeX keeps the TeX in an annotation; a sanitiser that removes the tag but
+  // not its text leaves it at the end of the <math>.
+  function sourceOf(node) {
+    const diagram = node.dataset.mdlMermaidSource;
+    if (diagram?.trim()) return {text: diagram, block: true};
+    if (!node.matches('.katex, .katex-display')) return null;
+    const math = node.querySelector('math');
+    const note = math?.querySelector('annotation[encoding="application/x-tex"]');
+    const last = math?.lastChild;
+    const tex = (note ?? (last?.nodeType === Node.TEXT_NODE ? last : null))?.textContent.trim();
+    return tex ? {text: tex, block: node.matches('.katex-display')} : null;
+  }
+  function holds(range, node) {
+    const whole = document.createRange();
+    whole.selectNode(node);
+    return range.compareBoundaryPoints(Range.START_TO_START, whole) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, whole) >= 0;
+  }
+  // Whether any of what a formula or diagram shows is selected. A triple click
+  // on a paragraph ends the selection at the very start of the next block.
+  function shows(node, range) {
+    if (holds(range, node)) return true;
+    const drawn = node.querySelector('.katex-html') ?? node;
+    const texts = document.createTreeWalker(drawn, NodeFilter.SHOW_TEXT);
+    while (texts.nextNode()) {
+      const text = texts.currentNode;
+      if (!range.intersectsNode(text) || text.parentElement.closest('style, script')) continue;
+      const start = text === range.startContainer ? range.startOffset : 0;
+      const end = text === range.endContainer ? range.endOffset : text.length;
+      if (/[^\s\u200b]/.test(text.data.slice(start, end))) return true;
+    }
+    // Nothing but shapes: they are selected together or not at all.
+    const shape = drawn.textContent.trim() ? null : drawn.querySelector('svg, img');
+    return !!shape && holds(range, shape);
+  }
+  // A link written as a place in this same page leads nowhere once it is pasted.
+  // One written out in full still leads to the page.
+  function leadsWithin(href) {
+    if (/^\s*https?:/i.test(href)) return false;
+    try {
+      const url = new URL(href, document.baseURI), here = new URL(location.href);
+      const anchored = href.trim().startsWith('#') || !!url.hash;
+      url.hash = ''; here.hash = '';
+      return anchored && url.href === here.href;
+    } catch { return false; }
+  }
+  // Salesforce's editor drops every pasted image and breaks its paragraph in
+  // two, so an image is written as a link to it, under its description.
+  function imageLink(node) {
+    const alt = (node.getAttribute('alt') || '').trim();
+    const src = safeURL(node.currentSrc || node.getAttribute('src'), true);
+    const box = node.getBoundingClientRect();
+    // Emoji and tracking pixels: never worth a link.
+    const small = node.complete && node.naturalWidth > 0 && box.width <= 32 && box.height <= 32;
+    const url = src && /^https?:/i.test(src) ? new URL(src) : null;
+    const around = node.closest('a[href]');
+    const target = around && linkOf(around);
+    if (target && !alt && !unnamed.has(around)) unnamed.set(around, fileName(url ?? new URL(target)));
+    const linked = !target && url && !small && openToOthers(url);
+    const text = alt || (linked ? fileName(url) : '');
+    if (!text) return null;
+    const label = document.createElement(linked ? 'a' : 'span');
+    if (linked) label.setAttribute('href', url.href);
+    label.textContent = text;
+    label.dataset.boksaImage = '';
+    return label;
+  }
+  // Links around an image without a description, by the name they get if
+  // nothing else is left in them.
+  const unnamed = new Map();
+  function fileName(url) {
+    const name = url.pathname.split('/').pop();
+    try { return decodeURIComponent(name) || url.hostname; } catch { return name; }
+  }
+  // Not an address on this machine or its own network, and not one that carries
+  // its own key.
+  function openToOthers(url) {
+    const host = url.hostname.replace(/\.$/, '');
+    return host.includes('.') && !host.startsWith('[') && !/\.(localhost|local|internal|intranet|lan|corp|home|private|home\.arpa)$/i.test(host)
+      && !/^(0|10|127|169\.254|192\.168|172\.(1[6-9]|2\d|3[01])|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\./.test(host)
+      && !url.username && !url.password
+      && ![...url.searchParams.keys()].some(key => /^(x(amz|goog)|sig$|auth$|jwt$|key$)|token|signature|secret|apikey|passw|credential|hmac/.test(key.toLowerCase().replace(/[^a-z]/g, '')));
+  }
+  // The address a link is pasted with, if it is.
+  function linkOf(node) {
+    const raw = node.getAttribute('href');
+    return raw !== null && !(salesforce && leadsWithin(raw)) ? safeURL(raw) : null;
+  }
+  // Two images side by side, or an image against a word, would run together.
+  function spaceImages(root) {
+    for (const label of root.querySelectorAll('[data-boksa-image]')) {
+      for (const [side, add, edge] of [['previousSibling', 'before', -1], ['nextSibling', 'after', 0]]) {
+        let outer = label;
+        while (!outer[side] && outer.parentElement && ['a', 'span', 'strong', 'b', 'em', 'i', 'u', 's', 'ins', 'mark'].includes(outer.parentElement.localName)) outer = outer.parentElement;
+        if (outer[side] && /[\p{L}\p{N}]/u.test(outer[side].textContent.at(edge) ?? '')) outer[add](' ');
+      }
+      if (label.localName === 'span') label.replaceWith(...label.childNodes);
+    }
+  }
+  // A display formula is often inside a paragraph, a heading or a span. As a
+  // code block it stands between two parts of it.
+  const codeParents = new Set(['div', 'li', 'td', 'th', 'caption', 'dd', 'dt', 'blockquote', 'ol', 'ul', 'dl']);
+  function liftCode(root) {
+    for (const pre of root.querySelectorAll('pre')) {
+      for (let box = pre.parentElement; box && box !== root && !codeParents.has(box.localName); box = pre.parentElement) {
+        const rest = box.cloneNode(false);
+        while (pre.nextSibling) rest.append(pre.nextSibling);
+        box.after(pre, rest);
+        for (const [part, edge] of [[box, 'lastChild'], [rest, 'firstChild']]) {
+          // The break that set the formula off from the text.
+          while (part[edge] && (part[edge].localName === 'br' || (part[edge].nodeType === Node.TEXT_NODE && !part[edge].data.trim()))) part[edge].remove();
+          if (!part.textContent.trim() && !part.querySelector('pre, table')) part.remove();
+        }
+      }
+    }
+  }
   function cloneSelected(node, range, parentComputed) {
     if (!range.intersectsNode(node)) return null;
     if (node.nodeType === Node.TEXT_NODE) {
@@ -256,6 +406,16 @@
     if (node.namespaceURI !== HTML_NS) return null;
     const tag = node.localName.toLowerCase();
     if (discard.has(tag)) return null;
+    if (salesforce && node.matches('.footnote-backref, [data-footnote-backref], [role="doc-backlink"]')) return null;
+    if (unselectable(parentComputed) && ['input', 'img', 'hr', 'br'].includes(tag)) {
+      // The box of a task says something about text that can be selected.
+      const item = tag === 'input' ? node.closest('li') : null;
+      if (!item || getComputedStyle(item).userSelect === 'none') return null;
+      const before = document.createRange();
+      before.setStart(item, 0);
+      before.setEndBefore(node);
+      if (before.toString().trim()) return null;
+    }
     // Task-list state would otherwise disappear along with the control.
     if (tag === 'input') {
       return node.type === 'checkbox' ? document.createTextNode(node.checked ? '☑ ' : '☐ ') : null;
@@ -263,6 +423,16 @@
     const computed = getComputedStyle(node);
     if (computed.display === 'none' || computed.visibility === 'hidden' || computed.visibility === 'collapse') return null;
     if (Number(computed.opacity) === 0) return null;
+    if (salesforce) {
+      const source = sourceOf(node);
+      if (source) {
+        if (unselectable(computed) || !shows(node, range)) return null;
+        const code = document.createElement(source.block ? 'pre' : 'code');
+        code.textContent = source.text;
+        return code;
+      }
+      if (tag === 'img') return imageLink(node);
+    }
     if (tag === 'hr') return ruleTable(node, computed);
     const copy = document.createElement(allowed.has(tag) ? tag : salesforce && computed.display.startsWith('inline') && !sectioning.has(tag) ? 'span' : 'div');
     style(tag, copy, computed, parentComputed);
@@ -271,7 +441,7 @@
     solidColors(node, copy);
     for (const name of ['title', 'lang', 'dir']) if (node.hasAttribute(name)) copy.setAttribute(name, node.getAttribute(name));
     if (tag === 'a') {
-      const href = node.hasAttribute('href') && safeURL(node.getAttribute('href'));
+      const href = linkOf(node);
       if (href) copy.setAttribute('href', href);
     }
     if (tag === 'img') {
@@ -308,9 +478,12 @@
       if (node.hasAttribute(name)) copy.setAttribute(name, node.getAttribute(name));
     }
     if (tag === 'li' && node.hasAttribute('value')) copy.setAttribute('value', node.getAttribute('value'));
+    const cell = ['td', 'th'].includes(tag);
+    if (cell && leaveOutUnselectable && inGutter(node)) return null;
     // Text the page renders invisibly must not ride along unseen in the HTML
     // flavour; descendants that restore a visible size or colour still copy.
     const invisible = parseFloat(computed.fontSize) < 4 || transparent(computed.color);
+    const hushed = unselectable(computed);
     let firstItem = null;
     // A closed <details> shows only its summary, and content-visibility: hidden
     // shows nothing of its content, although both still compute to display: block.
@@ -319,13 +492,14 @@
       ? [...node.children].find(child => child.localName === 'summary') : null;
     for (const child of node.childNodes) {
       if (folded && child !== summary) continue;
-      if (invisible && child.nodeType === Node.TEXT_NODE) continue;
+      if ((invisible || hushed) && child.nodeType === Node.TEXT_NODE) continue;
       const selected = cloneSelected(child, range, computed);
       if (!selected) continue;
       if (!firstItem && child.nodeType === Node.ELEMENT_NODE && child.localName === 'li') firstItem = child;
       copy.append(selected);
     }
-    if (!copy.childNodes.length && !voids.has(tag) && !(keepEmpty.has(tag) && !node.textContent.trim())) return null;
+    if (unnamed.has(node) && !copy.textContent.trim()) copy.textContent = unnamed.get(node);
+    if (!copy.childNodes.length && !voids.has(tag) && !(keepEmpty.has(tag) && (!node.textContent.trim() || (cell && leaveOutUnselectable && !selectableText(node))))) return null;
     if (tag === 'ol' && firstItem) {
       if (node.reversed) copy.setAttribute('reversed', '');
       const items = [...node.children].filter(n => n.localName === 'li');
@@ -890,7 +1064,8 @@
           }
           // Continuation lines and code sit one level in, under the item.
           indent(line, first ? depth : depth + 1);
-          if (first) line.append(`${marker}\u00a0`);
+          // A task's own box is marker enough.
+          if (first && (ordered || !item.hasAttribute('data-boksa-task'))) line.append(`${marker}\u00a0`);
           empty = true;
         };
         // The marker line is kept even when the item is only a code block.
@@ -911,6 +1086,9 @@
             const code = quillCode(child);
             indent(code, depth + 1);
             out.append(code);
+          } else if (child.localName === 'table') {
+            // A paragraph cannot hold one.
+            flush(); out.append(child);
           } else if (child.nodeType === Node.ELEMENT_NODE && blockTags.has(child.localName)) {
             // Each paragraph of the item starts its own line under the text.
             if (line && !empty) flush();
@@ -1547,6 +1725,7 @@
       if (!box || text.parentElement.closest('li') !== item || text.parentElement.closest('pre, code')) continue;
       const rest = text.data.slice(box[0].length);
       text.data = `${box[1] === '\u2611' ? '\u2705' : '\u2b1c'}\u00a0${rest}`;
+      item.dataset.boksaTask = '';
       const after = rest ? null : walker.nextNode();
       if (after && after.parentElement.closest('li') === item && !after.parentElement.closest('pre')) after.data = after.data.replace(/^\s+/, '');
     }
@@ -1574,15 +1753,24 @@
   }
   // The Customer Portal sets body text at 17.92px but h3 at 18px and h4 at
   // 16px (h1 24px, h2 21px), so a #### heading is smaller than the text under
-  // it. Headings move up one level (h4 and deeper all become h3) and are
-  // bold, so every heading stays larger and heavier than body text.
+  // it. Only h1 to h3 are used, and bold, so every heading stays larger and
+  // heavier than body text. Headings move up one level where that keeps the
+  // levels in the copy apart; levels that no longer fit become italic h3s.
   function portalHeadings(root) {
-    for (const heading of [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')]) {
-      const level = Number(heading.localName[1]);
-      const promoted = document.createElement(`h${Math.max(1, Math.min(3, level - 1))}`);
+    const headings = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+    const levels = [...new Set(headings.map(heading => Number(heading.localName[1])))].sort();
+    const slots = levels.map((level, index) => Math.max(index + 1, level - 1));
+    for (const heading of headings) {
+      const index = levels.indexOf(Number(heading.localName[1]));
+      const promoted = document.createElement(`h${Math.min(3, slots[index])}`);
       for (const name of heading.getAttributeNames()) promoted.setAttribute(name, heading.getAttribute(name));
       const bold = document.createElement('strong');
       bold.append(...heading.childNodes);
+      if (index && slots[index - 1] >= 3) {
+        const italic = document.createElement('em');
+        italic.append(...bold.childNodes);
+        bold.append(italic);
+      }
       promoted.append(bold);
       heading.replaceWith(promoted);
     }
@@ -1733,6 +1921,8 @@
     if (root.nodeType !== Node.ELEMENT_NODE) root = root.parentElement || root.host || document.body;
     if (!root) throw new Error(t('errNothingCopyable', 'The selection contains nothing that can be copied.'));
     while (root.parentElement && ['inline', 'contents'].includes(getComputedStyle(root).display)) root = root.parentElement;
+    // Part of a formula or diagram stands for the whole of it.
+    if (salesforce) root = root.closest('.katex-display, [data-mdl-mermaid-source]') ?? root.closest('.katex') ?? root;
     // Keep required list/table/code ancestors even when selection is inside one text node.
     for (let parent = root.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
       if (['OL', 'UL', 'DL', 'TABLE', 'PRE', 'BLOCKQUOTE'].includes(parent.tagName)) root = parent;
@@ -1768,9 +1958,12 @@
   // <details> in Selection.toString() although it is not on screen. It is left
   // out of layout while the text is read; the sheet is gone before any paint.
   function visibleText(selection) {
-    if (![...document.querySelectorAll('details')].some(isFolded)) return selection.toString();
+    const folded = [...document.querySelectorAll('details')].some(isFolded);
+    if (leaveOutUnselectable && !folded) return selection.toString();
     const sheet = new CSSStyleSheet();
-    sheet.replaceSync(`details:not([open]) > :not(summary:first-of-type) { display: none !important }
+    // An important rule in a layer wins over the page's own important rules.
+    sheet.replaceSync(`${leaveOutUnselectable ? '' : '@layer { * { user-select: text !important; -webkit-user-select: text !important } }'}
+      details:not([open]) > :not(summary:first-of-type) { display: none !important }
       details:not([open])::details-content { display: none !important }`);
     const before = [...document.adoptedStyleSheets];
     document.adoptedStyleSheets = [...before, sheet];
@@ -1811,26 +2004,37 @@
       restoreSelection = () => { selection.removeAllRanges(); if (caret) selection.addRange(caret); };
       selection.selectAllChildren(document.body);
     }
-    const text = visibleText(selection);
+    // Before anything is added to the page, which changes what toString() gives.
+    let text = visibleText(selection);
     const wrapper = document.createElement('div');
-    for (let index = 0; index < selection.rangeCount; index++) {
-      const range = selection.getRangeAt(index).cloneRange();
-      const root = rootFor(range);
-      const fragment = cloneSelected(root, range, null);
-      if (fragment) surface(root, wrapper).append(fragment);
+    for (const strict of [true, false]) {
+      leaveOutUnselectable = strict;
+      wrapper.replaceChildren();
+      for (let index = 0; index < selection.rangeCount; index++) {
+        const range = selection.getRangeAt(index).cloneRange();
+        const root = rootFor(range);
+        const fragment = cloneSelected(root, range, null);
+        if (fragment) surface(root, wrapper).append(fragment);
+      }
+      if (/\S/.test(wrapper.textContent) || wrapper.querySelector('img')) break;
     }
+    if (!leaveOutUnselectable) text = visibleText(selection) || wrapper.textContent.trim();
     if (!wrapper.childNodes.length) throw new Error(t('errNothingCopyable', 'The selection contains nothing that can be copied.'));
     if (salesforce) readMarkers(wrapper);
     collapseWhitespace(wrapper);
     trimAfterBreaks(wrapper);
     semanticEmphasis(wrapper);
     const stripMarkers = () => {
-      const names = ['code', 'width', 'min', 'tight', 'break', 'callout', 'title', 'summary'].map(name => `data-boksa-${name}`);
+      const names = ['code', 'width', 'min', 'tight', 'break', 'callout', 'title', 'summary', 'task', 'image'].map(name => `data-boksa-${name}`);
       for (const marked of wrapper.querySelectorAll(names.map(name => `[${name}]`).join(', '))) {
         for (const name of names) marked.removeAttribute(name);
       }
     };
     if (salesforce) {
+      // A link that leads nowhere is text, and must not look like a link.
+      for (const link of [...wrapper.querySelectorAll('a:not([href])')].reverse()) link.replaceWith(...link.childNodes);
+      spaceImages(wrapper);
+      liftCode(wrapper);
       trimEdges(wrapper);
       pushInline(wrapper);
       callouts(wrapper);

@@ -51,7 +51,7 @@ Right-click the Boksa toolbar button and choose **Options**, or open **Extension
 | Keep syntax highlighting | On / Off | Off removes the colour, weight and italics of tokens in a code block, which is then copied in the block's single text colour. |
 | Fonts | Page fonts / Editor font | "Editor font" leaves out the `font-family` of body text and sets a monospaced font on code elements. |
 
-The plain-text clipboard format is always the original text of the selection, whatever the options.
+The plain-text clipboard format is always the original text of the selection, whatever the options. Text that the page marks as not selectable (`user-select: none`), such as line numbers, an outline, the label of a code block or the `#` beside a heading, is left out of both formats and for every paste target, along with the images, rules and checkboxes among it. The box of a task stays, and so does the place of a table cell; a whole column of such cells (line numbers) is left out. If nothing else is selected, all of it is copied.
 
 ### Paste target: Salesforce
 
@@ -81,7 +81,7 @@ Copies in a shape made for Salesforce Lightning rich-text fields (based on Quill
 
 - A data table takes over the outer border drawn on the container around it. Without one, it gets a border in the colour of its inner lines, in place of Salesforce's black default.
 - On-screen column widths are written as percentages on the first row so that columns are not made equal. Each column keeps enough room for its longest word on one line in a 720px table, taken from the wider columns. Tables are full width, as on screen, and words are not broken inside cells. Header and stripe backgrounds are left out because Salesforce darkens them.
-- Horizontal rules become tables, which Salesforce stores verbatim. When two tables follow each other (for example a table and then a rule), an empty line goes between them, because Salesforce would move the second to the end of the comment. The same goes for two quotes or two code blocks, which Salesforce would join into one.
+- In a typed-out list, a table in an item stands on its own below the item's text. Horizontal rules become tables, which Salesforce stores verbatim. When two tables follow each other (for example a table and then a rule), an empty line goes between them, because Salesforce would move the second to the end of the comment. The same goes for two quotes or two code blocks, which Salesforce would join into one.
 - A paragraph with line breaks (`<br>`), such as a signature, goes into a borderless one-cell table. Salesforce would otherwise make each line a new paragraph and spread the lines apart.
 - Quotes stay quotes, which Salesforce draws with a grey bar and box. See [Richer elements](#richer-elements-in-both-salesforce-targets) below.
 - The header row of a data table has a heavier line under it, in place of its shading.
@@ -95,13 +95,17 @@ These use only tags that the Salesforce editor keeps and the Customer Portal all
 |---|---|
 | Quote (`>`) | A quote box (`p.ql-quote-block` paragraphs inside a `<blockquote>`). Lists in it are typed out, headings become bold lines, and line breaks become lines of their own. A code block, a table, or a list holding one stands between two parts of the quote, because neither side can hold it inside. A quote inside a quote joins the outer one. In a list item or table cell a quote becomes ordinary lines. |
 | Callout: GitHub alerts, Obsidian, MkDocs, Docusaurus, VitePress, MarkdownLens, or a plain quote starting with `[!NOTE]` and the like | A quote box whose title, if it has one, is bold and led by ℹ️ (note, info), ⭐ (tip), ✅ (success), ❗ (important), ❓ (question), ⚠️ (warning) or ⛔ (caution, danger). The title is coloured in Salesforce; the portal removes colours. |
-| Task list | ✅ and ⬜ in place of the boxes, in a real list unless the list is nested or holds code (see Lists above) |
+| Task list | ✅ and ⬜ in place of the boxes, in a real list unless the list is nested or holds code (see Lists above), where the box also takes the place of the bullet |
 | Definition list | Bold terms with the definitions indented below |
 | `<sup>`, `<sub>` | Unicode raised and lowered characters (x², H₂O) when every character has one; otherwise plain text |
 | `<ins>`, underline set by a style | `<u>` |
 | `<mark>` | Bold, because no background survives |
 | `<kbd>`, `<samp>` | `<code>` |
 | `<summary>`, `<figcaption>` | Bold; an italic line |
+| Formula drawn by KaTeX | Its TeX source, as inline code or a code block, the whole of it even if part was selected. A display formula inside a paragraph stands between two parts of it. A formula whose source is not on the page is copied as text |
+| Mermaid diagram in MarkdownLens | Its source, as a code block |
+| Image | A link to the image, named by its description or file name. The Salesforce editor drops every image and splits the paragraph it was in. Only the description is kept for an address others cannot open or should not be given (`data:`, `file:`, this machine or its own network, a password, key or signature in the address), and for an icon of 32 pixels or less. Inside a link the description, or failing any text left in it the file name, becomes the text of that link |
+| Link to a place in the same page (`#steps`) | Its text. A full `https://` address stays a link. Footnote numbers stay; the arrows back from a footnote are left out |
 
 ### Paste target: Salesforce + Customer Portal
 
@@ -114,7 +118,7 @@ For Salesforce comments that are also shown in the Red Hat Customer Portal. The 
 - **Strikethrough** is drawn by adding U+0336 (combining long stroke overlay) to each character instead of using a tag. The Salesforce editor turns every strikethrough into `<strike>`, which the portal shows as text.
 - **Paragraphs with line breaks** become ordinary paragraphs.
 - **Blank lines:** the portal shows paragraphs with no space between them, so an empty paragraph goes between blocks. The exceptions are typed-out list lines, either side of headings (which have their own margins), and after lists, tables and quotes that have a bottom margin.
-- **Headings** move up one level (h4 and below become h3) and are bold. The portal shows body text at 17.92px, h3 at 18px and h4 at 16px, so `####` headings would be smaller than the body text.
+- **Headings** move up as far as one level, staying apart where they can: a document with `#`, `##` and `###` keeps h1, h2 and h3. Deeper levels become h3, in italics where two levels share it. All are bold. The portal shows body text at 17.92px, h3 at 18px and h4 at 16px, so `####` headings would be smaller than the body text.
 
 ## Local .md file support
 
@@ -157,8 +161,8 @@ One copy writes `text/html` and `text/plain` to the clipboard together. The plai
 - If a web editor sanitises or removes pasted inline styles, or replaces them with its own, colours, backgrounds and spacing can differ. The extension cannot force its way around this.
 - Line breaks and sizes depend on the editor's handling of tables and lists, the fonts available and the page width. Pixel-for-pixel identity is not guaranteed.
 - CSS pseudo-elements `::before` and `::after`, custom counters, background images and gradients, canvas and video are not reproduced. List numbers and bullets are expressed as ordinary HTML lists.
-- Inline SVG and MathML are left out. There is no safe HTML structure for them, and leaving them in would mix the raw text of `<script>` and `<style>` inside an SVG into the result. Inline SVG diagrams, such as those drawn by Mermaid, are therefore not in the paste. They copy normally if the viewer renders them as `<img>`.
-- Images keep only `http`/`https` and `data:image/...` URLs. Image files are not embedded separately in the clipboard, so images that need authentication or cannot be reached from outside may not appear where you paste.
+- Inline SVG and MathML are left out, except where a Salesforce target can copy the source instead (see [Richer elements](#richer-elements-in-both-salesforce-targets)). There is no safe HTML structure for them, and leaving them in would mix the raw text of `<script>` and `<style>` inside an SVG into the result. Inline SVG diagrams, such as those drawn by Mermaid, are otherwise not in the paste. They copy normally if the viewer renders them as `<img>`.
+- For Any editor, images keep only `http`/`https` and `data:image/...` URLs. Image files are not embedded separately in the clipboard, so images that need authentication or cannot be reached from outside may not appear where you paste.
 - Local `file:` paths are left out of both links and images. They would not open in a remote editor anyway, and would leave a local path containing your user name in the document. A `file:` image pastes as its alt text and a `file:` link as plain text.
 - Copying part of a table removes the cells that were not selected. For complex tables with merged cells, select the whole table.
 - Very large documents may pause briefly while computed styles are read. A page's own copy event handler may also intercept the copy.

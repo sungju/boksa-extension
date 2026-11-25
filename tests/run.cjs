@@ -886,7 +886,7 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
       async r => {
         const shape = await inspect(r.html, `const blocks = [...root.querySelectorAll('h1, h2, h3, h4, p')].filter(e => e.textContent.trim());
           return {text: blocks.map(e => e.textContent), empty: root.querySelectorAll('span:empty').length}`);
-        assert.deepEqual(shape.text, ['Before', 'After', 'Deep', 'Two words x', 'Text with a link', '\u00a0kept\u00a0', ' code ', ' caption']);
+        assert.deepEqual(shape.text, ['Before', 'After', 'Deep', 'Two words x', 'Text with a link', '\u00a0kept\u00a0', ' code ', 'pic caption']);
         assert.equal(shape.empty, 0, 'what held only the space goes with it');
       });
 
@@ -1068,14 +1068,14 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
         assert.deepEqual(await texts('blockquote em'), ['D', 'E', 'F']);
         assert.deepEqual(await texts('a[href="https://example.com/x"]'), ['G', 'H', 'I']);
       });
-    await optioned(`${target}: images and rules in quoted lists, definition lists and links stay`, {target},
+    await optioned(`${target}: image descriptions and rules in quoted lists, definition lists and links stay`, {target},
       `<div id="target"><blockquote><ul><li><p>A</p><p>${img('a')}</p></li></ul></blockquote>
        <dl><dt>T</dt><dd>D</dd><div>${img('b')}</div><p>${img('c')}</p><a href="https://example.com/x">${img('d')}</a><hr></dl>
        <a href="https://example.com/y"><span>${img('e')}</span><h3>H</h3></a></div>`,
       async r => {
-        const shape = await inspect(r.html, `return {imgs: [...root.querySelectorAll('img')].map(i => i.alt), linked: [...root.querySelectorAll('a img')].map(i => i.alt),
+        const shape = await inspect(r.html, `return {imgs: root.querySelectorAll('img').length, text: root.textContent.replace(/[\\s\u00a0\u2500\u2022\u25e6]+/g, ''), linked: [...root.querySelectorAll('a')].map(a => a.textContent.trim()),
           rule: root.querySelectorAll('table').length + (root.textContent.match(/\u2500+/g) || []).length}`);
-        assert.deepEqual(shape, {imgs: ['a', 'b', 'c', 'd', 'e'], linked: ['d', 'e'], rule: 1});
+        assert.deepEqual(shape, {imgs: 0, text: 'AaTDbcdeH', linked: ['d', 'e', 'H'], rule: 1});
       });
     await optioned(`${target}: inline elements without a counterpart stay on their line`, {target},
       `<div id="target"><ul><li>A (<time>B</time>), <font>C</font>: <x-tag>D</x-tag>, E<ul><li>F</li></ul></li></ul><ul><li>G <cite>H</cite>, I</li></ul></div>`,
@@ -1141,11 +1141,19 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
       assert.deepEqual(blocks, ['Intro:', 'BLANK', 'list', 'After.']);
     });
 
+  const headings = html => inspect(html, `return [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => h.localName +
+    (h.querySelector('strong > em') ? 'i' : '') + ':' + (h.querySelector('strong')?.textContent ?? ''))`);
+  for (const [levels, expected] of [['1234', 'h1 h2 h3 h3i'], ['123', 'h1 h2 h3'], ['23', 'h1 h2'], ['34', 'h2 h3'], ['3', 'h2'], ['124', 'h1 h2 h3'], ['6', 'h3'], ['56', 'h3 h3i'], ['2132', 'h2 h1 h3 h2']]) {
+    await optioned(`portal: heading levels ${levels} stay apart`, {target: 'portal'},
+      `<div id="target">${[...levels].map(n => `<h${n}>T</h${n}><p>x</p>`).join('')}</div>`,
+      async r => assert.equal((await headings(r.html)).map(h => h.split(':')[0]).join(' '), expected));
+  }
   await optioned('portal: headings move up a level so they stay above body text', {target: 'portal'},
     `<div id="target"><h2>Two</h2><h3>Three</h3><h4>Four</h4><h5>Five</h5><p><strong>Source:</strong> x</p></div>`,
     async r => {
       const heads = await inspect(r.html, "return [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')].map(h => h.localName + ':' + (h.querySelector('strong')?.textContent ?? ''))");
       assert.deepEqual(heads, ['h1:Two', 'h2:Three', 'h3:Four', 'h3:Five']);
+      assert.equal(await inspect(r.html, "return root.querySelectorAll('h3 em').length"), 1, 'the level that no longer fits is italic');
     });
 
   await optioned('salesforce: a plain flat list stays a real list', {target: 'salesforce'},
@@ -1338,7 +1346,195 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
   assert.deepEqual(Object.keys(await page.evaluate(() => modernPayload)).sort(), ['text/html', 'text/plain']);
   console.log('PASS async clipboard fallback'); passed++;
 
+  // Text marked as not selectable stays out, as it does from an ordinary copy.
+  for (const target of ['generic', 'salesforce', 'portal']) {
+    const marked = `<style>.n{user-select:none}.y{user-select:text}</style><div id="target">
+      <nav class="n"><ul><li><a href="https://example.com/o">Outline</a></li></ul><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="ICON"><hr><input type="checkbox"></nav>
+      <h2><a class="n" href="#t">#</a> Title</h2><div><div class="n"><span>bash</span></div><pre><span class="n">1\n2</span><code>one\ntwo</code></pre></div>
+      <p class="n">gone <b class="y">kept</b></p><p>end</p></div>`;
+    await optioned(`${target}: text that cannot be selected is left out`, {target}, marked, async r => {
+      const shape = await inspect(r.html, `return {text: root.textContent.replace(/[\\s\u00a0]+/g, ''), pre: root.querySelector('pre').textContent, odd: root.querySelectorAll('li, img, hr, table').length}`);
+      assert.deepEqual(shape, {text: 'Titleonetwokeptend', pre: 'one\ntwo', odd: 0});
+      assert.equal(collapse(r.text), 'Titleonetwokeptend', 'the plain text leaves out the same');
+    });
+    await optioned(`${target}: a page that forbids all selection is copied in full`, {target},
+      `<style>body{user-select:none}</style><div id="target"><p>All <b>of</b> it</p></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.textContent.trim()"), 'All of it'));
+  }
+  await optioned('an unselectable image is kept where its text is not marked', {target: 'generic'},
+    `<style>img{user-select:none}</style><div id="target"><p>pic <img src="https://example.com/a.png" alt="A"></p></div>`,
+    r => assert(r.html.includes('src="https://example.com/a.png"')));
+
+  for (const target of ['generic', 'portal']) {
+    const tables = html => inspect(html, "return [...root.querySelectorAll('tr')].map(r => [...r.cells].map(c => c.textContent.replace(/[\\s\\u00a0]+/g, '')).join('|')).join(' / ')");
+    for (const [name, rows, expected] of [
+      ['a heading', '<thead><tr><th class=n>Name</th><th>Notes</th></tr></thead><tbody><tr><td>a</td><td>b</td></tr></tbody>', '|Notes / a|b'],
+      ['some cells', '<tr><td class=n>x</td><td>b</td></tr><tr><td>c</td><td>d</td></tr>', '|b / c|d'],
+      ['a heading over an empty column', '<tr><th class=n>N</th><th>T</th></tr><tr><td></td><td>b</td></tr>', '|T / |b'],
+      ['a gutter', '<tr><td class=n></td><td>hdr</td></tr><tr><td class=n>1</td><td>x</td></tr>', 'hdr / x'],
+      ['a gutter of one row', '<tr><td><pre class=n>1\n2</pre></td><td><code>x</code></td></tr>', 'x'],
+      ['a gutter with joined cells', '<tr><td colspan=2 class=n>1</td><td>x</td></tr><tr><td class=n>1</td><td>y</td><td>z</td></tr>', '|x / |y|z'],
+    ]) await optioned(`${target}: unselectable cells keep columns in place: ${name}`, {target},
+      `<style>.n{user-select:none}td,th{border:1px solid #ccc}</style><div id="target"><table>${rows}</table></div>`,
+      async r => assert.equal(await tables(r.html), expected));
+    await optioned(`${target}: an unselectable heading keeps a column of images`, {target},
+      `<style>.n{user-select:none}td,th{border:1px solid #ccc}</style><div id="target"><table><tr><th class=n>Icon</th><th>T</th></tr><tr><td><img alt="up" src="https://example.com/u.png"></td><td>b</td></tr><tr><td class=n>none</td><td>c</td></tr></table></div>`,
+      async r => assert(r.html.includes('https://example.com/u.png')));
+    for (const [name, html, expected] of [
+      ['line breaks', '<style>body{user-select:none}</style><div id="target"><p>All<br>of it</p></div>', 'Allofit'],
+      ['white space', '<div id="target">\n<p style="user-select:none">All of it</p>\n</div>', 'Allofit'],
+      ['an important rule', '<style>.n{user-select:none!important}</style><div class=n id="target"><p class=n>All of it</p></div>', 'Allofit'],
+      ['important inline styles', '<div id="target"><p style="user-select:none!important">All of it</p></div>', 'Allofit'],
+      ['a folded part', '<style>body{user-select:none}</style><div id="target"><p>All</p><details><summary>S</summary>hidden</details></div>', 'AllS'],
+    ]) await optioned(`${target}: unselectable content with ${name} is copied rather than nothing`, {target}, html, async r => {
+      assert.equal(collapse(await inspect(r.html, 'return root.textContent')), expected);
+      assert.equal(collapse(r.text), expected, 'the plain text says the same');
+    });
+    await optioned(`${target}: an unselectable table is copied once`, {target},
+      `<style>#target{user-select:none}</style><div id="target"><table><tr><td colspan=2>a</td></tr><tr><td>b</td><td>c</td></tr></table></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.querySelectorAll('table').length"), 1));
+    await optioned(`${target}: no line breaks are left of an unselectable gutter`, {target},
+      `<style>.n{user-select:none}</style><div id="target"><pre><span class=n>1<br>2<br></span><code>a\nb</code></pre></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.querySelectorAll('br').length"), 0));
+    await optioned(`${target}: paragraphs under an important rule stay apart in the plain text`, {target},
+      '<style>.n{user-select:none!important}</style><div class=n id="target"><p class=n>One</p><p class=n>Two</p></div>',
+      async r => assert.match(r.text, /^One\n+Two$/));
+    await optioned(`${target}: a checkbox that ends an item goes with its unselectable label`, {target},
+      `<style>.n{user-select:none}</style><div id="target"><ul><li>Text <label class=n><input type="checkbox"> Show</label></li></ul></div>`,
+      async r => assert.equal((await inspect(r.html, 'return root.textContent')).trim(), 'Text'));
+    await optioned(`${target}: the plain text is what the browser gives`, {target},
+      `<div id="target"><p>x</p><table><tr><td>a</td><td>b</td></tr></table></div>`,
+      async r => assert.equal(r.text, 'x\n\na\tb'));
+    await optioned(`${target}: a task keeps its box under an unselectable label`, {target},
+      `<style>.n{user-select:none}</style><div id="target"><ul><li><label class=n><input type="checkbox" checked></label> Text</li></ul></div>`,
+      async r => assert.match(await inspect(r.html, 'return root.textContent'), /[☑✅][\s ]*Text/));
+  }
+
+  // MarkdownLens and other viewers: what is drawn rather than written.
+  const katex = (tex, keep, display) => {
+    const html = `<span class="katex"><span class="katex-mathml"><math${display ? ' display="block"' : ''}><semantics><mrow><mi>E</mi></mrow>${keep
+      ? `<annotation encoding="application/x-tex">${tex}</annotation></semantics>` : `</semantics>${tex}`}</math></span><span class="katex-html" aria-hidden="true"><span>E</span><span>2</span></span></span>`;
+    return display ? `<section><eqn><span class="katex-display" style="display:block">${html}</span></eqn></section>` : `<eq>${html}</eq>`;
+  };
+  for (const target of ['salesforce', 'portal']) {
+    for (const keep of [true, false]) await optioned(`${target}: formulas are copied as their TeX (annotation ${keep ? 'kept' : 'removed'})`, {target},
+      `<div id="target"><p>Energy ${katex('E=mc^2', keep)} holds.</p>${katex('\\sum_{k} k', keep, true)}<ul><li>in ${katex('n_i', keep)} list</li></ul></div>`,
+      async r => {
+        assert.deepEqual(await inspect(r.html, `return {p: root.querySelector('p').textContent, code: [...root.querySelectorAll('code')].map(c => c.textContent),
+          pre: [...root.querySelectorAll('pre.ql-syntax')].map(c => c.textContent), math: root.querySelectorAll('math, .katex').length, li: root.querySelector('li').textContent.trim(), nested: root.querySelectorAll('p pre, span pre').length}`),
+        {p: 'Energy E=mc^2 holds.', code: ['E=mc^2', 'n_i'], pre: ['\\sum_{k} k'], math: 0, li: 'in n_i list', nested: 0});
+      });
+    for (const [name, open, close, expected] of [
+      ['a paragraph', '<p>', '</p>', 'p:before pre:x_1 p:after h:Next'],
+      ['a paragraph of its own', '<p class="katex-block">', '</p>', 'pre:x_1 h:Next', true],
+      ['a heading of its own', '<h2>', '</h2>', 'pre:x_1 h:Next'],
+      ['a span', '<p><span><em>', '</em></span></p>', 'p:before pre:x_1 p:after h:Next'],
+      ['a heading', '<h2>', '</h2>', 'h:before pre:x_1 h:after h:Next'],
+      ['a list item', '<ul><li>', '</li></ul>', 'p:•before pre:x_1 p:after h:Next'],
+      ['a list paragraph', '<ol><li><p>', '</p></li></ol>', 'p:1.before pre:x_1 p:after h:Next'],
+    ]) await optioned(`${target}: a display formula in ${name} stands between its parts`, {target},
+      `<div id="target">${open}${expected.startsWith('pre') ? '' : 'before '}<span class="katex-display" style="display:block">${katex('x_1', true)}</span>${expected.startsWith('pre') ? '' : ' after'}${close}<h2>Next</h2></div>`,
+      async r => assert.equal((await inspect(r.html, `return [...root.querySelectorAll('p, pre, h1, h2, h3')].map(e => (/^h/.test(e.localName) ? 'h' : e.localName) + ':' + e.textContent.replace(/[\\s\\u00a0]+/g, '')).filter(t => t !== 'p:').join(' ') + [...root.querySelectorAll('p, span, em')].filter(e => !e.textContent && !e.querySelector('br') && e.localName !== 'br').length`)), expected + '0'));
+    await optioned(`${target}: the breaks around a display formula go`, {target},
+      `<div id="target"><p>a<br><span class="katex-display" style="display:block">${katex('x_1', true)}</span><br>b</p></div>`,
+      async r => assert.equal(await inspect(r.html, "return [...root.querySelectorAll('p, pre')].filter(e => e.textContent.trim()).map(e => e.innerHTML).join(' ')"), 'a x_1 b'));
+    await optioned(`${target}: a formula in a caption leaves the table whole`, {target},
+      `<style>td{border:1px solid #ccc}</style><div id="target"><table><caption>c <span class="katex-display" style="display:block">${katex('x_1', true)}</span></caption><tr><td>a</td></tr></table></div>`,
+      async r => assert.deepEqual(await inspect(r.html, "return [root.querySelectorAll('table').length, root.textContent.replace(/[\\s\\u00a0]+/g, '')]"), [1, 'cx_1a']));
+    await optioned(`${target}: a rule beside code in a figure stays`, {target},
+      `<div id="target"><figure style="display:inline"><pre>code</pre><hr></figure><p>b</p></div>`,
+      async r => assert(target === 'portal' ? r.html.includes('───') : /<table/.test(r.html), r.html));
+    await optioned(`${target}: a formula of shapes alone is copied with the whole`, {target},
+      `<div id="target"><p>a <span class="katex"><span class="katex-mathml"><math><semantics><mspace></mspace><annotation encoding="application/x-tex">\\rule{1em}{1em}</annotation></semantics></math></span><span class="katex-html"><span>​</span></span></span> b</p></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.querySelector('code')?.textContent"), '\\rule{1em}{1em}'));
+    await optioned(`${target}: a formula or diagram that cannot be selected is left out`, {target},
+      `<style>.n{user-select:none}</style><div id="target"><nav class=n>Outline ${katex('E=c', true)}<figure data-mdl-mermaid-source="graph LR"><svg><text>A</text></svg></figure></nav><p>Body</p></div>`,
+      async r => assert.equal(collapse(await inspect(r.html, 'return root.textContent')), 'Body'));
+    await optioned(`${target}: KaTeX written as MathML alone is copied as its TeX`, {target},
+      `<div id="target"><p>x <span class="katex"><math><semantics><mrow><mi>E</mi></mrow><annotation encoding="application/x-tex">E=1</annotation></semantics></math></span></p></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.querySelector('code').textContent"), 'E=1'));
+    // A triple click ends the selection at the start of the next block.
+    for (const [name, next] of [
+      ['diagram', '<figure id="next" data-mdl-mermaid-source="graph LR; A--&gt;B"><svg width="9" height="9"><style>.a{fill:red}</style><text>A</text></svg></figure>'],
+      ['diagram without text', '<figure id="next" data-mdl-mermaid-source="graph LR; A--&gt;B"><svg width="9" height="9"><rect width="5" height="5"></rect></svg></figure>'],
+      ['display formula', `<div id="next">${katex('E=c', true, true)}</div>`],
+      ['formula', `<p id="next">${katex('E=c', true)} and more</p>`],
+    ]) {
+      await optioned(`${target}: a selection that stops before a ${name} does not include it`, {target},
+        `<div id="target"><p id="first">Text para</p>${next}</div>`, r => assert(/graph|E=c/.test(r.html), 'the source is copied with the whole'));
+      await page.evaluate(() => {
+        const range = document.createRange(), next = document.querySelector('#next');
+        let end = next; while (end.firstElementChild && end.localName !== 'svg' && !end.matches('.katex-html')) end = end.lastElementChild && end.matches('.katex') ? end.lastElementChild : end.firstElementChild;
+        range.setStart(document.querySelector('#first').firstChild, 0);
+        const label = next.querySelector('svg text');
+        if (label) range.setEnd(label.firstChild, 0);
+        else range.setEnd(end.matches('.katex-html') ? end.firstElementChild.firstChild : end, 0);
+        getSelection().removeAllRanges(); getSelection().addRange(range);
+      });
+      const part = await run();
+      assert.equal(part.ok, true, part.error);
+      assert.equal(collapse(await inspect(part.html, 'return root.textContent')), 'Textpara', `${target}: ${name}: ${part.html}`);
+    }
+    await optioned(`${target}: a formula without its TeX is left as it is`, {target},
+      `<div id="target"><p>x <span class="katex"><span class="katex-html"><span>E</span></span></span></p></div>`,
+      async r => assert.equal(await inspect(r.html, "return root.textContent.trim()"), 'x E'));
+    await optioned(`${target}: a diagram is copied as its source`, {target},
+      `<div id="target"><p>Before</p><figure data-mdl-mermaid-source="flowchart LR\n  A --> B"><svg width="90" height="40"><style>.a{}</style><text>A</text></svg></figure><p>After</p></div>`,
+      async r => assert.deepEqual(await inspect(r.html, "return [...root.querySelectorAll('p, pre')].map(e => e.localName + ':' + e.textContent).filter(t => t !== 'p:')"),
+        ['p:Before', 'pre:flowchart LR\n  A --> B', 'p:After']));
+    await optioned(`${target}: links within the page become text, footnotes keep their numbers`, {target},
+      `<style>a{color:#06c;text-decoration:underline}</style><div id="target"><p>See <a href="#steps">the <b>steps</b></a>, <a href="https://example.com/#x">other</a> and note<sup><a href="#fn1">[1]</a></sup>.</p>
+       <ol><li><p>Note text. <a href="#fnref1" class="footnote-backref">\u21a9\ufe0e</a></p></li></ol></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return {links: [...root.querySelectorAll('a')].map(a => a.getAttribute('href')), p: root.querySelector('p').textContent, bold: root.querySelector('p strong, p b')?.textContent, li: root.querySelector('li').textContent.trim()}`);
+        assert.deepEqual(shape, {links: ['https://example.com/#x'], p: 'See the steps, other and note[1].', bold: 'steps', li: 'Note text.'});
+      });
+    await optioned(`${target}: images become links to them`, {target},
+      `<div id="target"><p>A <img alt="the graph" src="https://example.com/g.png?a=1"> b</p><p><img src="https://example.com/dir/my%20pic.png"></p>
+       <p>local <img alt="dev" src="http://localhost:1/x.png"> <a href="https://example.com/p"><img alt="badge" src="https://example.com/b.svg"></a> <img alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">end</p></div>`,
+      async r => {
+        const shape = await inspect(r.html, `return {imgs: root.querySelectorAll('img').length, links: [...root.querySelectorAll('a')].map(a => a.textContent + ' ' + a.getAttribute('href')), last: [...root.querySelectorAll('p')].pop().textContent.trim()}`);
+        assert.deepEqual(shape, {imgs: 0, links: ['the graph https://example.com/g.png?a=1', 'my pic.png https://example.com/dir/my%20pic.png', 'badge https://example.com/p'], last: 'local dev badge end'});
+      });
+    for (const [name, html, expected] of [
+      ['a linked image without a description', '<p>x <a href="https://example.com/full.png"><img src="https://example.com/t.png" alt=""></a> y</p>', 'x t.png y = t.png https://example.com/full.png'],
+      ['an inlined image without a description in a link', '<p>x <a href="https://example.com/full.png"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></a> y</p>', 'x full.png y = full.png https://example.com/full.png'],
+      ['a linked image beside hidden text', '<p>x <a href="https://example.com/f"><span style="display:none">Open</span><img src="https://example.com/t.png" alt=""></a> y</p>', 'x t.png y = t.png https://example.com/f'],
+      ['a linked image beside unselectable text', '<p>x <a href="https://example.com/f"><span style="user-select:none">Open</span><img src="https://example.com/t.png" alt=""></a> y</p>', 'x t.png y = t.png https://example.com/f'],
+      ['two linked images without descriptions', '<p>x <a href="https://example.com/f"><img src="https://example.com/t.png" alt=""><img src="https://example.com/u.png" alt=""></a> y</p>', 'x t.png y = t.png https://example.com/f'],
+      ['badges side by side', '<p><a href="https://example.com/1"><img src="https://example.com/a.svg" alt="A"></a><a href="https://example.com/2"><img src="https://example.com/b.svg" alt="B"></a></p>', 'A B = A https://example.com/1, B https://example.com/2'],
+      ['descriptions side by side', '<p><img src="http://wiki/a.png" alt="A"><img src="http://wiki/b.png" alt="B">word</p>', 'A B word = '],
+      ['pictures side by side', '<p><picture><img src="https://example.com/a.png" alt="A"></picture><picture><img src="https://example.com/b.png" alt="B"></picture>tail</p>', 'A B tail = A https://example.com/a.png, B https://example.com/b.png'],
+      ['an icon beside the text of a link', '<p>x <a href="https://example.com/p">Text<img src="https://example.com/t.png" alt=""></a></p>', 'x Text = Text https://example.com/p'],
+      ['an image in a link within the page', '<p>x <a href="#big"><img src="https://example.com/t.png" alt="Graph"></a> y</p>', 'x Graph y = Graph https://example.com/t.png'],
+      ['images side by side', '<p><img alt="A" src="https://example.com/a.png"><img alt="B" src="https://example.com/b.png">end</p>', 'A B end = A https://example.com/a.png, B https://example.com/b.png'],
+      ['a private address', '<p><img alt="A" src="http://192.0.2.1/a.png"> <img alt="B" src="http://10.1.2.3/b.png"> <img alt="C" src="http://wiki/c.png"> <img alt="D" src="http://files.local/d.png"> e</p>', 'A B C D e = A http://192.0.2.1/a.png'],
+      ['an address with a key in it', '<p><img alt="A" src="https://u:p@example.com/a.png"> <img alt="B" src="https://example.com/b.png?X-Amz-Signature=abc"> <img alt="C" src="https://example.com/c.png?jwt=abc"> <img alt="D" src="https://example.com/c.png?accessToken=a"> <img alt="E" src="https://example.com/c.png?api-key=a"> <img alt="F" src="http://wiki.corp/c.png"> <img alt="G" src="http://host.local./c.png"> <img alt="H" src="https://example.com/c.png?keyword=a&w=2"> d</p>', 'A B C D E F G H d = H https://example.com/c.png?keyword=a&w=2'],
+      ['a link to a part of the page written in full', '<p><a href="https://example.com/page#part">part</a></p>', 'part = part https://example.com/page#part'],
+    ]) {
+      await page.route('**/*', route => route.abort());
+      await optioned(`${target}: ${name}`, {target}, `<div id="target">${html}</div>`, async r =>
+        assert.equal(await inspect(r.html, `return root.textContent.replace(/[\\s\\u00a0]+/g, ' ').trim() + ' = ' + [...root.querySelectorAll('a')].map(a => a.textContent + ' ' + a.getAttribute('href')).join(', ')`), expected));
+      await page.unroute('**/*');
+    }
+    await optioned(`${target}: typed-out tasks have their box as the only marker`, {target},
+      `<div id="target"><ul><li><input type="checkbox" checked> Done<ul><li><input type="checkbox"> Sub</li><li>plain</li></ul></li></ul><ol><li><input type="checkbox"> One<ul><li>x</li></ul></li></ol></div>`,
+      async r => assert.deepEqual(await inspect(r.html, "return [...root.querySelectorAll('p')].map(e => e.textContent.replace(/\u00a0/g, '_').trim()).filter(Boolean)"),
+        ['\u2705_Done', '\u2b1c_Sub', '\u25e6_plain', '1._\u2b1c_One', '\u25e6_x']));
+    await optioned(`${target}: a table in a typed-out list stands on its own`, {target},
+      `<style>td{border:1px solid #ccc}</style><div id="target"><ol><li><p>One</p><div><table><tbody><tr><td>a</td><td>b</td></tr></tbody></table></div><p>more</p><ul><li>x</li></ul></li></ol></div>`,
+      async r => {
+        assert(!/<p[^>]*>\s*<table/.test(r.html), 'a table inside a paragraph');
+        assert.deepEqual((await inspect(r.html, "return [...root.querySelectorAll('p, table')].map(e => e.localName + ':' + e.textContent.replace(/\u00a0/g, '_').replace(/\s+/g, ''))")).filter(t => t !== 'p:'),
+          ['p:1._One', 'table:ab', 'p:more', 'p:\u25e6_x']);
+      });
+    await optioned(`${target}: a quote admonition becomes a titled quote box`, {target},
+      `<div id="target"><div class="mdl-admonition mdl-admonition-quote"><p class="mdl-admonition-title">Someone</p><p>Body</p></div></div>`,
+      async r => assert.deepEqual(await inspect(r.html, "return [...root.querySelectorAll('blockquote > p')].map(e => e.textContent.replace(/\u00a0/g, '_'))"), ['\u275d_Someone', 'Body']));
+  }
+
   // Nothing selected: the whole page is copied and the caret is left as it was.
+  await page.evaluate(() => { window.boksaOptions = {target: 'generic'}; });
   await page.setContent('<!doctype html><meta charset="utf-8"><h2>Title</h2><p id="target">body <strong>text</strong></p>');
   await page.evaluate(() => {
     const r = document.createRange(); r.setStart(document.querySelector('#target').firstChild, 2); r.collapse(true);
@@ -1366,7 +1562,8 @@ const collapse = value => value.replace(/\s+/gu, '').replace(/[\u2611\u2610]/g, 
     page.off('request', watch);
     assert.equal(lazy.ok, true, lazy.error);
     assert.deepEqual(requests, [], `${target}: the copy caused a request`);
-    assert(lazy.html.includes('src="https://example.com/lazy.png?a=1&amp;b=2"'), `${target}: the image lost its address`);
+    const name = target === 'generic' ? 'src' : 'href';
+    assert(lazy.html.includes(`${name}="https://example.com/lazy.png?a=1&amp;b=2"`), `${target}: the image lost its address`);
     assert(lazy.html.includes('text data-boksa-src="x"') && !/data-boksa-src-/.test(lazy.html), `${target}: the waiting name leaked`);
   }
   await page.evaluate(() => { delete globalThis.boksaOptions; });
