@@ -2,16 +2,26 @@
 
 A Chrome Manifest V3 extension that copies a selection of rendered Markdown as **rich HTML carrying the page's computed styles**. It needs no build step, server or Tampermonkey.
 
-## Installing on macOS
+## Local installation
 
-1. Unzip `boksa.zip` and move the `boksa` folder somewhere you will keep it.
+There is nothing to build: Chrome (109 or later) loads the source folder as it is.
+
+1. Get the source, into a folder you will keep:
+
+   ```sh
+   git clone https://github.com/sungju/boksa-extension.git
+   ```
+
+   Without Git, choose **Code → Download ZIP** on [GitHub](https://github.com/sungju/boksa-extension) and unzip it. If you were given a `boksa-<version>.zip`, unzip that instead.
 2. Enter `chrome://extensions` in Chrome's address bar.
 3. Turn on **Developer mode** in the top right.
 4. Click **Load unpacked**.
-5. Choose the `boksa` folder that directly contains `manifest.json`, not the ZIP or a parent folder.
+5. Choose the folder that directly contains `manifest.json`, not the ZIP or a parent folder. It is `boksa-extension` from Git, `boksa-extension-main` from GitHub's ZIP, and `boksa` from a `boksa-<version>.zip`.
 6. On the extension's **Details** page, turn on **Allow access to file URLs**.
 7. If your Markdown viewer also needs file URL access, turn on the same setting for it. Reload any Markdown files that are already open.
 8. Pin Boksa from Chrome's puzzle-piece extensions menu to copy with a button as well.
+
+Chrome runs Boksa from that folder, so do not move or delete it afterwards.
 
 ## Usage
 
@@ -36,7 +46,7 @@ At `chrome://extensions/shortcuts`, find **Boksa → Copy the selection as rich 
 
 To change only the shortcut, **edit it on the settings page above; no reinstall is needed** and it takes effect at once.
 
-To use a new ZIP as well, unzip it, replace the files in the extension folder you loaded earlier, and press the extension's reload button at `chrome://extensions`. Saved shortcut settings may remain, so **set Control+Shift+9 yourself on the shortcuts page after reloading**. An extension cannot overwrite a shortcut you customised.
+To use a new version, run `git pull` in the folder you cloned, or unzip the new ZIP and replace the files in the extension folder you loaded earlier. Then press the extension's reload button at `chrome://extensions`. Saved shortcut settings may remain, so **set Control+Shift+9 yourself on the shortcuts page after reloading**. An extension cannot overwrite a shortcut you customised.
 
 ## Copy options
 
